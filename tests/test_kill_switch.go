@@ -35,6 +35,12 @@ func runKillSwitchTest() {
 	fmt.Println("===========================================")
 	fmt.Println()
 
+	// Clean up any stale processes before starting
+	fmt.Println("Cleaning up any existing processes...")
+	exec.Command("pkill", "-f", "mock_receiver").Run()
+	exec.Command("pkill", "-f", "proxy").Run()
+	time.Sleep(500 * time.Millisecond)
+
 	// Configuration - use 127.0.0.1 to force IPv4
 	proxyAddr := "127.0.0.1:50051"
 	httpAddr := "http://127.0.0.1:8080"
@@ -56,7 +62,10 @@ func runKillSwitchTest() {
 
 	// Start mock receiver
 	fmt.Println("Step 1: Starting mock receiver...")
-	mockCmd := startMockReceiver(mockReceiverPort)
+	mockCmd, err := startMockReceiver(mockReceiverPort)
+	if err != nil {
+		log.Fatalf("Failed to start mock receiver: %v", err)
+	}
 	defer mockCmd.Process.Kill()
 
 	// Wait for mock receiver to be ready
@@ -336,7 +345,7 @@ func runKillSwitchTest() {
 }
 
 // startMockReceiver starts a mock aggsender for testing
-func startMockReceiver(port string) *exec.Cmd {
+func startMockReceiver(port string) (*exec.Cmd, error) {
 	// Create a simple receiver that logs to file
 	receiverCode := `
 package main
@@ -387,42 +396,49 @@ func main() {
 	
 	logFile, err := os.OpenFile("mock-receiver.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
+		log.Fatal("Failed to open log file: ", err)
 	}
 	defer logFile.Close()
 	
 	lis, err := net.Listen("tcp", "127.0.0.1:%s")
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		log.Fatal("Failed to listen: ", err)
 	}
 	
 	s := grpc.NewServer()
 	v1.RegisterCertificateSubmissionServiceServer(s, &mockServer{logFile: logFile})
 	
-	log.Println("Mock receiver listening on 127.0.0.1:%s")
+	log.Println("Mock receiver started")
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+		log.Fatal("Failed to serve: ", err)
 	}
 }
 `
 	// Write receiver code to temp file
 	tmpFile := "mock_receiver_temp.go"
-	receiverCode = fmt.Sprintf(receiverCode, port, port)
+	receiverCode = fmt.Sprintf(receiverCode, port)
 	os.WriteFile(tmpFile, []byte(receiverCode), 0644)
 
 	// Build and run
 	buildCmd := exec.Command("go", "build", "-o", "mock_receiver", tmpFile)
 	buildOut, err := buildCmd.CombinedOutput()
 	if err != nil {
-		log.Fatalf("Failed to build mock receiver: %v\nOutput: %s", err, string(buildOut))
+		return nil, fmt.Errorf("failed to build mock receiver: %v\nOutput: %s", err, string(buildOut))
 	}
 	os.Remove(tmpFile)
 
 	cmd := exec.Command("./mock_receiver")
-	// Capture stderr to see any startup errors
+	// Capture both stdout and stderr
+	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
-		log.Fatalf("Failed to start mock receiver: %v", err)
+		return nil, fmt.Errorf("failed to start mock receiver: %v", err)
+	}
+
+	// Give it a moment to start and check if it's still running
+	time.Sleep(100 * time.Millisecond)
+	if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
+		return nil, fmt.Errorf("mock receiver process died immediately after starting - likely port already in use")
 	}
 
 	// Clean up binary on exit
@@ -431,7 +447,7 @@ func main() {
 		os.Remove("mock_receiver")
 	}()
 
-	return cmd
+	return cmd, nil
 }
 
 // submitTestCertificate submits a test certificate to the proxy

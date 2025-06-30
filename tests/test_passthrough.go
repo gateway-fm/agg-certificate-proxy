@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -16,6 +17,12 @@ func runPassthroughTest() {
 	fmt.Println("=====================================")
 	fmt.Println()
 
+	// Clean up any stale processes before starting
+	fmt.Println("Cleaning up any existing processes...")
+	exec.Command("pkill", "-f", "mock_receiver").Run()
+	exec.Command("pkill", "-f", "proxy").Run()
+	time.Sleep(500 * time.Millisecond)
+
 	// Clean up first
 	os.Remove("passthrough-test.db")
 	os.Remove("passthrough-test.log")
@@ -23,7 +30,10 @@ func runPassthroughTest() {
 
 	// Start a simple receiver
 	fmt.Println("1. Starting mock receiver on :50052...")
-	receiverCmd := startSimpleReceiver("50052")
+	receiverCmd, err := startSimpleReceiver("50052")
+	if err != nil {
+		log.Fatalf("Failed to start receiver: %v", err)
+	}
 	defer receiverCmd.Process.Kill()
 	time.Sleep(2 * time.Second)
 
@@ -43,7 +53,7 @@ func runPassthroughTest() {
 	proxyCmd.Stderr = logFile
 
 	if err := proxyCmd.Start(); err != nil {
-		log.Fatalf("Failed to start proxy: %v", err)
+		log.Fatal("Failed to start proxy: ", err)
 	}
 	defer proxyCmd.Process.Kill()
 
@@ -80,7 +90,7 @@ func runPassthroughTest() {
 }
 
 // startSimpleReceiver starts a very simple mock receiver
-func startSimpleReceiver(port string) *exec.Cmd {
+func startSimpleReceiver(port string) (*exec.Cmd, error) {
 	receiverCode := `
 package main
 
@@ -126,13 +136,13 @@ func (s *server) SubmitCertificate(ctx context.Context, req *v1.SubmitCertificat
 func main() {
 	lis, err := net.Listen("tcp", "127.0.0.1:%s")
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		log.Fatal("Failed to listen: ", err)
 	}
 	
 	s := grpc.NewServer()
 	v1.RegisterCertificateSubmissionServiceServer(s, &server{})
 	
-	log.Println("Receiver listening on 127.0.0.1:%s")
+	log.Println("Receiver started")
 	s.Serve(lis)
 }
 `
@@ -146,14 +156,22 @@ func main() {
 	// Build
 	buildCmd := exec.Command("go", "build", "-o", "simple_receiver", tmpFile)
 	if err := buildCmd.Run(); err != nil {
-		log.Fatalf("Failed to build receiver: %v", err)
+		return nil, fmt.Errorf("failed to build receiver: %v", err)
 	}
 	os.Remove(tmpFile)
 
 	// Run
 	cmd := exec.Command("./simple_receiver")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
-		log.Fatalf("Failed to start receiver: %v", err)
+		return nil, fmt.Errorf("failed to start receiver: %v", err)
+	}
+
+	// Give it a moment to start and check if it's still running
+	time.Sleep(100 * time.Millisecond)
+	if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
+		return nil, fmt.Errorf("receiver process died immediately after starting - likely port already in use")
 	}
 
 	// Cleanup after 30 seconds
@@ -162,5 +180,5 @@ func main() {
 		os.Remove("simple_receiver")
 	}()
 
-	return cmd
+	return cmd, nil
 }
