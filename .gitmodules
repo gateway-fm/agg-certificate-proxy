@@ -1,0 +1,3 @@
+[submodule "interop"]
+	path = interop
+	url = git@github.com:agglayer/interop.git
