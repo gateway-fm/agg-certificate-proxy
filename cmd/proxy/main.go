@@ -26,6 +26,8 @@ func main() {
 	delayStr := flag.String("delay", "48h", "Delay duration for certificate processing (e.g., 48h, 30m, 2h15m)")
 	aggsenderAddr := flag.String("aggsender-addr", "", "Address of the aggsender to forward certificates to")
 	schedulerInterval := flag.String("scheduler-interval", "30s", "How often to check for pending certificates (e.g., 30s, 1m)")
+	killSwitchAPIKey := flag.String("kill-switch-api-key", "", "API key for kill switch endpoint")
+	killRestartAPIKey := flag.String("kill-restart-api-key", "", "API key for restart endpoint")
 	flag.Parse()
 
 	// Parse scheduler interval
@@ -43,6 +45,23 @@ func main() {
 
 	// Create service
 	service := certificate.NewService(db)
+
+	// Store API keys if provided
+	if *killSwitchAPIKey != "" {
+		if err := db.SetCredential("kill_switch_api_key", *killSwitchAPIKey); err != nil {
+			log.Printf("Failed to set kill switch API key: %v", err)
+		} else {
+			log.Printf("Kill switch API key configured")
+		}
+	}
+
+	if *killRestartAPIKey != "" {
+		if err := db.SetCredential("kill_restart_api_key", *killRestartAPIKey); err != nil {
+			log.Printf("Failed to set kill restart API key: %v", err)
+		} else {
+			log.Printf("Kill restart API key configured")
+		}
+	}
 
 	// Update aggsender address if provided
 	if *aggsenderAddr != "" {

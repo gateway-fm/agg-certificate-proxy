@@ -52,5 +52,17 @@ func (s *Scheduler) Stop() {
 
 // processCertificates is the task that runs periodically.
 func (s *Scheduler) processCertificates() {
+	// Check if scheduler is active in the database
+	isActive, err := s.service.db.GetSchedulerStatus()
+	if err != nil {
+		log.Printf("error checking scheduler status: %v", err)
+		return
+	}
+
+	if !isActive {
+		log.Println("Scheduler is disabled via kill switch, skipping certificate processing")
+		return
+	}
+
 	s.service.ProcessPendingCertificates()
 }

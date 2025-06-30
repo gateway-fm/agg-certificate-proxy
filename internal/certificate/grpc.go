@@ -58,10 +58,12 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 	} else {
 		log.Printf("Network %d is not on the delay list. Sending certificate straight through.", networkID)
 		// Send immediately
-		cert := Certificate{RawProto: rawProto, Metadata: string(metadataJson)}
+		cert := Certificate{ID: 0, RawProto: rawProto, Metadata: string(metadataJson)}
 		if err := s.service.SendToAggSender(cert); err != nil {
+			log.Printf("ERROR: Failed to send certificate immediately: %v", err)
 			return nil, fmt.Errorf("failed to send certificate immediately: %w", err)
 		}
+		log.Printf("Successfully sent certificate for network %d immediately", networkID)
 	}
 
 	return &nodev1.SubmitCertificateResponse{

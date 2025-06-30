@@ -61,7 +61,8 @@ help: ## Show this help message
 	@echo '  proto               Generate Go code from proto files'
 	@echo '  proto-tools         Install required protobuf tools'
 	@echo '  clean               Remove build artifacts and database'
-	@echo '  test                Run tests'
+	@echo '  test                Run unit tests'
+	@echo '  test-integration    Run integration tests (kill switch, passthrough)'
 	@echo '  update-submodules   Update git submodules'
 	@echo ''
 	@echo 'Configuration:'
@@ -106,9 +107,14 @@ build: ## Build the proxy binary
 	@go build -o proxy ./cmd/proxy
 
 .PHONY: test
-test: ## Run tests
-	@echo "Running tests..."
+test: ## Run unit tests
+	@echo "Running unit tests..."
 	@go test -v ./...
+
+.PHONY: test-integration
+test-integration: ## Run integration tests
+	@echo "Running integration tests..."
+	@cd tests && make all
 
 .PHONY: clean
 clean: ## Remove build artifacts and database
@@ -116,6 +122,7 @@ clean: ## Remove build artifacts and database
 	@rm -f proxy
 	@rm -f $(DB_PATH)
 	@rm -f proxy.log
+	@cd tests && make clean 2>/dev/null || true
 	@echo "Clean complete"
 
 .PHONY: update-submodules

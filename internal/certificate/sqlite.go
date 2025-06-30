@@ -57,6 +57,54 @@ func (s *sqliteStore) Init() error {
 		return fmt.Errorf("failed to create configuration table: %w", err)
 	}
 
+	// Credentials table
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS credentials (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create credentials table: %w", err)
+	}
+
+	// Scheduler status table
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS scheduler_status (
+			id INTEGER PRIMARY KEY,
+			is_active BOOLEAN NOT NULL DEFAULT 1,
+			last_updated DATETIME NOT NULL
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create scheduler_status table: %w", err)
+	}
+
+	// Kill switch attempts table
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS kill_switch_attempts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			attempt_type TEXT NOT NULL,
+			attempted_at DATETIME NOT NULL
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create kill_switch_attempts table: %w", err)
+	}
+
+	// Initialize scheduler status if not exists
+	var count int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM scheduler_status").Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to check scheduler status: %w", err)
+	}
+	if count == 0 {
+		_, err = s.db.Exec("INSERT INTO scheduler_status (id, is_active, last_updated) VALUES (1, 1, ?)", time.Now())
+		if err != nil {
+			return fmt.Errorf("failed to initialize scheduler status: %w", err)
+		}
+	}
+
 	// Check if we need to migrate from delay_hours to delay_seconds
 	var delayHours string
 	err = s.db.QueryRow("SELECT value FROM configuration WHERE key = 'delay_hours'").Scan(&delayHours)
@@ -72,13 +120,13 @@ func (s *sqliteStore) Init() error {
 	}
 
 	// Set default delay if not present
-	var count int
-	err = s.db.QueryRow("SELECT COUNT(*) FROM configuration WHERE key = 'delay_seconds'").Scan(&count)
+	var count2 int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM configuration WHERE key = 'delay_seconds'").Scan(&count2)
 	if err != nil {
 		return fmt.Errorf("failed to check for delay configuration: %w", err)
 	}
 
-	if count == 0 {
+	if count2 == 0 {
 		// Default: 48 hours = 172800 seconds
 		_, err = s.db.Exec("INSERT INTO configuration (key, value) VALUES ('delay_seconds', '172800')")
 		if err != nil {
@@ -201,6 +249,84 @@ func (s *sqliteStore) SetConfigValue(key, value string) error {
 	_, err := s.db.Exec("INSERT OR REPLACE INTO configuration (key, value) VALUES (?, ?)", key, value)
 	if err != nil {
 		return fmt.Errorf("failed to set config value for key %s: %w", key, err)
+	}
+	return nil
+}
+
+// GetCredential retrieves a credential value.
+func (s *sqliteStore) GetCredential(key string) (string, error) {
+	var value string
+	err := s.db.QueryRow("SELECT value FROM credentials WHERE key = ?", key).Scan(&value)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get credential for key %s: %w", key, err)
+	}
+	return value, nil
+}
+
+// SetCredential sets a credential value.
+func (s *sqliteStore) SetCredential(key, value string) error {
+	_, err := s.db.Exec("INSERT OR REPLACE INTO credentials (key, value) VALUES (?, ?)", key, value)
+	if err != nil {
+		return fmt.Errorf("failed to set credential for key %s: %w", key, err)
+	}
+	return nil
+}
+
+// GetSchedulerStatus retrieves the scheduler status.
+func (s *sqliteStore) GetSchedulerStatus() (bool, error) {
+	var isActive bool
+	err := s.db.QueryRow("SELECT is_active FROM scheduler_status WHERE id = 1").Scan(&isActive)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// If no status exists, default to active
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to get scheduler status: %w", err)
+	}
+	return isActive, nil
+}
+
+// SetSchedulerStatus sets the scheduler status.
+func (s *sqliteStore) SetSchedulerStatus(isActive bool) error {
+	_, err := s.db.Exec("UPDATE scheduler_status SET is_active = ?, last_updated = ? WHERE id = 1", isActive, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to set scheduler status: %w", err)
+	}
+	return nil
+}
+
+// RecordKillSwitchAttempt records a kill switch attempt.
+func (s *sqliteStore) RecordKillSwitchAttempt(attemptType string) error {
+	_, err := s.db.Exec("INSERT INTO kill_switch_attempts (attempt_type, attempted_at) VALUES (?, ?)", attemptType, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to record kill switch attempt: %w", err)
+	}
+	return nil
+}
+
+// GetRecentKillSwitchAttempts retrieves recent kill switch attempts within the specified duration.
+func (s *sqliteStore) GetRecentKillSwitchAttempts(attemptType string, duration time.Duration) (int, error) {
+	cutoff := time.Now().Add(-duration)
+	var count int
+	err := s.db.QueryRow(
+		"SELECT COUNT(*) FROM kill_switch_attempts WHERE attempt_type = ? AND attempted_at >= ?",
+		attemptType, cutoff,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get recent kill switch attempts: %w", err)
+	}
+	return count, nil
+}
+
+// CleanupOldKillSwitchAttempts removes old kill switch attempts.
+func (s *sqliteStore) CleanupOldKillSwitchAttempts(olderThan time.Duration) error {
+	cutoff := time.Now().Add(-olderThan)
+	_, err := s.db.Exec("DELETE FROM kill_switch_attempts WHERE attempted_at < ?", cutoff)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup old kill switch attempts: %w", err)
 	}
 	return nil
 }

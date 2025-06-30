@@ -32,3 +32,4 @@ proxy
 proxy.log
 certs.db
 agg-certificate-proxy
+simple_receiver

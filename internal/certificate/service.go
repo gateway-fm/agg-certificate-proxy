@@ -26,6 +26,13 @@ type Db interface {
 	GetCertificates() ([]Certificate, error)
 	GetConfigValue(key string) (string, error)
 	SetConfigValue(key, value string) error
+	GetCredential(key string) (string, error)
+	SetCredential(key, value string) error
+	GetSchedulerStatus() (bool, error)
+	SetSchedulerStatus(isActive bool) error
+	RecordKillSwitchAttempt(attemptType string) error
+	GetRecentKillSwitchAttempts(attemptType string, duration time.Duration) (int, error)
+	CleanupOldKillSwitchAttempts(olderThan time.Duration) error
 }
 
 // Service handles the business logic for certificates.
@@ -137,11 +144,16 @@ func (s *Service) ProcessPendingCertificates() {
 
 // SendToAggSender sends a certificate to the agg sender.
 func (s *Service) SendToAggSender(cert Certificate) error {
-	log.Printf("Sending certificate %d to aggsender...", cert.ID)
+	if cert.ID == 0 {
+		log.Printf("Sending immediate certificate to aggsender...")
+	} else {
+		log.Printf("Sending certificate %d to aggsender...", cert.ID)
+	}
 
 	// Check if we have an aggsender_address in config
 	aggSenderAddr, err := s.db.GetConfigValue("aggsender_address")
 	if err != nil || aggSenderAddr == "" {
+		log.Printf("No aggsender_address configured, using default: localhost:50052")
 		aggSenderAddr = "localhost:50052" // Default to our mock receiver
 	}
 
@@ -170,16 +182,29 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 	}
 
 	// Send the certificate
-	log.Printf("Forwarding certificate %d (network %d) to aggsender at %s", cert.ID, certProto.GetNetworkId(), aggSenderAddr)
+	if cert.ID == 0 {
+		log.Printf("Forwarding immediate certificate (network %d) to aggsender at %s", certProto.GetNetworkId(), aggSenderAddr)
+	} else {
+		log.Printf("Forwarding certificate %d (network %d) to aggsender at %s", cert.ID, certProto.GetNetworkId(), aggSenderAddr)
+	}
+
 	resp, err := client.SubmitCertificate(ctx, req)
 	if err != nil {
 		return fmt.Errorf("failed to submit certificate to aggsender: %v", err)
 	}
 
 	if resp.CertificateId != nil && resp.CertificateId.Value != nil {
-		log.Printf("Certificate %d forwarded successfully, received ID: %x", cert.ID, resp.CertificateId.Value.Value)
+		if cert.ID == 0 {
+			log.Printf("Immediate certificate forwarded successfully, received ID: %x", resp.CertificateId.Value.Value)
+		} else {
+			log.Printf("Certificate %d forwarded successfully, received ID: %x", cert.ID, resp.CertificateId.Value.Value)
+		}
 	} else {
-		log.Printf("Certificate %d forwarded successfully", cert.ID)
+		if cert.ID == 0 {
+			log.Printf("Immediate certificate forwarded successfully")
+		} else {
+			log.Printf("Certificate %d forwarded successfully", cert.ID)
+		}
 	}
 
 	return nil
