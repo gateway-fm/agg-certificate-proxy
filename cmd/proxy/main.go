@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
+	"log/slog"
 )
 
 func main() {
@@ -41,7 +42,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			slog.Error("failed to close database: ", closeErr)
+		}
+	}()
 
 	// Create service
 	service := certificate.NewService(db)

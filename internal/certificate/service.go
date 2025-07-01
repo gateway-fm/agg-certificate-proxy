@@ -19,7 +19,7 @@ import (
 // Db defines the interface for database operations.
 type Db interface {
 	Init() error
-	Close()
+	Close() error
 	StoreCertificate(rawProto []byte, metadata string) error
 	GetProcessableCertificates() ([]Certificate, error)
 	MarkCertificateProcessed(id int64) error
