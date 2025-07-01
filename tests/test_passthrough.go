@@ -7,7 +7,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"log/slog"
+	"log"
 )
 
 // runPassthroughTest runs a simple test to verify passthrough works
@@ -98,6 +98,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"log"
 	"net"
 	"os"
 	

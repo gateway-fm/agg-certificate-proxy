@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -18,7 +18,6 @@ import (
 	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
-	"log"
 )
 
 // max returns the maximum of two integers
@@ -355,6 +354,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"log"
 	"net"
 	"os"
 	"time"
