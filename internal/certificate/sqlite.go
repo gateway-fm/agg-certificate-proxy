@@ -3,7 +3,6 @@ package certificate
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
 	"time"
 	"log/slog"
 
@@ -107,20 +106,6 @@ func (s *SqliteStore) Init() error {
 		}
 	}
 
-	// Check if we need to migrate from delay_hours to delay_seconds
-	var delayHours string
-	err = s.db.QueryRow("SELECT value FROM configuration WHERE key = 'delay_hours'").Scan(&delayHours)
-	if err == nil && delayHours != "" {
-		// Migrate to delay_seconds
-		hours, _ := strconv.Atoi(delayHours)
-		seconds := hours * 3600
-		_, err = s.db.Exec("INSERT OR REPLACE INTO configuration (key, value) VALUES ('delay_seconds', ?)", strconv.Itoa(seconds))
-		if err == nil {
-			// Remove old delay_hours
-			s.db.Exec("DELETE FROM configuration WHERE key = 'delay_hours'")
-		}
-	}
-
 	// Set default delay if not present
 	var count2 int
 	err = s.db.QueryRow("SELECT COUNT(*) FROM configuration WHERE key = 'delay_seconds'").Scan(&count2)
@@ -174,13 +159,7 @@ func (s *SqliteStore) GetProcessableCertificates() ([]Certificate, error) {
 	var delaySeconds int
 	err := s.db.QueryRow("SELECT value FROM configuration WHERE key = 'delay_seconds'").Scan(&delaySeconds)
 	if err != nil {
-		// Check old delay_hours for backward compatibility
-		var delayHours int
-		err = s.db.QueryRow("SELECT value FROM configuration WHERE key = 'delay_hours'").Scan(&delayHours)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get delay configuration: %w", err)
-		}
-		delaySeconds = delayHours * 3600
+		return nil, fmt.Errorf("failed to get delay configuration: %w", err)
 	}
 
 	delay := time.Duration(delaySeconds) * time.Second

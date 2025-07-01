@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"log/slog"
 )
 
 // APIServer handles HTTP requests.
@@ -339,14 +340,12 @@ func (s *APIServer) viewCerts(w http.ResponseWriter, r *http.Request) {
 	// Get delay configuration
 	delayStr, err := s.service.GetConfigValue("delay_seconds")
 	if err != nil {
-		// Try old delay_hours for backward compatibility
-		delayHoursStr, err := s.service.GetConfigValue("delay_hours")
-		if err != nil {
-			delayStr = "172800" // default 48 hours
-		} else {
-			hours, _ := strconv.Atoi(delayHoursStr)
-			delayStr = strconv.Itoa(hours * 3600)
+		w.WriteHeader(http.StatusInternalServerError)
+		if _, err := w.Write([]byte("failed to get delay_seconds config value")); err != nil {
+			slog.Error("failed to write error message to response", "err", err)
+			return
 		}
+		return
 	}
 	delaySeconds, _ := strconv.Atoi(delayStr)
 	delayDuration := time.Duration(delaySeconds) * time.Second
@@ -490,13 +489,13 @@ func (s *APIServer) viewCerts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *APIServer) viewConfig(w http.ResponseWriter, r *http.Request) {
-	delay, err := s.service.GetConfigValue("delay_hours")
+	delay, err := s.service.GetConfigValue("delay_seconds")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get config: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	config := map[string]string{"delay_hours": delay}
+	config := map[string]string{"delay_seconds": delay}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(config); err != nil {

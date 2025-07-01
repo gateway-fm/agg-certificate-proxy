@@ -113,22 +113,13 @@ func main() {
 
 	// Get delay and display in human-readable format
 	delaySeconds, err := service.GetConfigValue("delay_seconds")
-	if err == nil && delaySeconds != "" {
+	if err != nil {
+		slog.Error("failed to get delay_seconds from config", "err", err)
+		return
+	} else {
 		if seconds, err := strconv.Atoi(delaySeconds); err == nil {
 			duration := time.Duration(seconds) * time.Second
-			log.Printf("Delay: %s", duration)
-		}
-	} else {
-		// Check old delay_hours for backward compatibility
-		delayHours, err := service.GetConfigValue("delay_hours")
-		if err == nil && delayHours != "" {
-			if hours, err := strconv.Atoi(delayHours); err == nil {
-				seconds := hours * 3600
-				// Migrate to delay_seconds
-				db.SetConfigValue("delay_seconds", strconv.Itoa(seconds))
-				log.Printf("Migrated delay from %s hours to %d seconds", delayHours, seconds)
-				log.Printf("Delay: %s", time.Duration(seconds)*time.Second)
-			}
+			slog.Info("found delay", "val", duration)
 		}
 	}
 
