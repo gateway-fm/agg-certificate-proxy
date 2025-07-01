@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -18,6 +18,7 @@ import (
 	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
+	"log"
 )
 
 // max returns the maximum of two integers
@@ -353,7 +354,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"time"
@@ -380,7 +381,7 @@ func (s *mockServer) SubmitCertificate(ctx context.Context, req *v1.SubmitCertif
 	logMsg := fmt.Sprintf("[%%s] RECEIVED CERTIFICATE for network %%d\n", timestamp, networkID)
 	s.logFile.WriteString(logMsg)
 	s.logFile.Sync()
-	log.Print(logMsg)
+	slog.Info(logMsg)
 	
 	// Return a mock response
 	return &v1.SubmitCertificateResponse{
@@ -408,7 +409,7 @@ func main() {
 	s := grpc.NewServer()
 	v1.RegisterCertificateSubmissionServiceServer(s, &mockServer{logFile: logFile})
 	
-	log.Println("Mock receiver started")
+	slog.Info("mock receiver started")
 	if err := s.Serve(lis); err != nil {
 		log.Fatal("Failed to serve: ", err)
 	}

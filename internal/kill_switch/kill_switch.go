@@ -1,10 +1,10 @@
 package kill_switch
 
 import (
-	"log"
 	"os"
 	"sync"
 	"time"
+	"log/slog"
 )
 
 // Config holds the kill switch configuration.
@@ -49,7 +49,7 @@ func (k *KillSwitch) RegisterKillRequest(key string) {
 
 // TriggerKill initiates the kill process and exits the process after KillTimeout.
 func (k *KillSwitch) TriggerKill() {
-	log.Printf("Kill switch triggered! Exiting in %s...", k.cfg.KillTimeout)
+	slog.Info("kill switch triggered! Exiting...", "time", k.cfg.KillTimeout)
 	time.Sleep(k.cfg.KillTimeout)
 	os.Exit(1)
 }

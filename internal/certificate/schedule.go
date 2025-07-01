@@ -1,10 +1,10 @@
 package certificate
 
 import (
-	"log"
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
+	"log/slog"
 )
 
 // Scheduler handles periodic certificate processing.
@@ -38,15 +38,15 @@ func NewScheduler(service *Service, interval time.Duration) (*Scheduler, error) 
 
 // Start begins the processing loop.
 func (s *Scheduler) Start() {
-	log.Println("Starting certificate scheduler...")
+	slog.Info("starting certificate scheduler...")
 	s.scheduler.Start()
 }
 
 // Stop halts the processing loop.
 func (s *Scheduler) Stop() {
-	log.Println("Stopping certificate scheduler...")
+	slog.Info("stopping certificate scheduler...")
 	if err := s.scheduler.Shutdown(); err != nil {
-		log.Printf("error shutting down scheduler: %v", err)
+		slog.Error("error shutting down scheduler", "err", err)
 	}
 }
 
@@ -55,12 +55,12 @@ func (s *Scheduler) processCertificates() {
 	// Check if scheduler is active in the database
 	isActive, err := s.service.db.GetSchedulerStatus()
 	if err != nil {
-		log.Printf("error checking scheduler status: %v", err)
+		slog.Error("error checking scheduler status", "err", err)
 		return
 	}
 
 	if !isActive {
-		log.Println("Scheduler is disabled via kill switch, skipping certificate processing")
+		slog.Info("scheduler is disabled via kill switch, skipping certificate processing")
 		return
 	}
 

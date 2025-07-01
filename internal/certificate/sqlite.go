@@ -171,7 +171,7 @@ func (s *SqliteStore) GetProcessableCertificates() ([]Certificate, error) {
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			slog.Error("Failed to close certificates query: %v\n", closeErr)
+			slog.Error("failed to close certificates query: %v\n", closeErr)
 		}
 	}()
 
@@ -204,7 +204,7 @@ func (s *SqliteStore) GetCertificates() ([]Certificate, error) {
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			slog.Error("Failed to close certificates query: %v\n", closeErr)
+			slog.Error("failed to close certificates query: %v\n", closeErr)
 		}
 	}()
 

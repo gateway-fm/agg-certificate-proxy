@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -333,7 +332,7 @@ func (s *APIServer) viewCerts(w http.ResponseWriter, r *http.Request) {
 	// Get scheduler status
 	schedulerActive, err := s.service.db.GetSchedulerStatus()
 	if err != nil {
-		log.Printf("Failed to get scheduler status: %v", err)
+		slog.Error("failed to get scheduler status", "err", err)
 		schedulerActive = true // Default to active if error
 	}
 
@@ -504,84 +503,90 @@ func (s *APIServer) viewConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start starts the HTTP server.
-func (s *APIServer) Start(addr string) {
-	log.Printf("HTTP server listening on %s", addr)
+func (s *APIServer) Start(addr string) error {
+	slog.Info("http server listening", "address", addr)
 	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatalf("failed to start HTTP server: %v", err)
+		return err
 	}
 }
 
 // handleKillSwitch handles the kill switch endpoint
 func (s *APIServer) handleKillSwitch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	// Get the API key from query parameter
 	apiKey := r.URL.Query().Get("key")
 	if apiKey == "" {
-		http.Error(w, "Missing API key", http.StatusUnauthorized)
+		http.Error(w, "missing API key", http.StatusUnauthorized)
 		return
 	}
 
 	// Check if the API key matches the stored kill switch key
 	storedKey, err := s.service.db.GetCredential("kill_switch_api_key")
 	if err != nil {
-		log.Printf("Error retrieving kill switch API key: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		slog.Error("retrieving kill switch API key", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if storedKey == "" || apiKey != storedKey {
-		http.Error(w, "Invalid API key", http.StatusUnauthorized)
+		http.Error(w, "invalid API key", http.StatusUnauthorized)
 		return
 	}
 
 	// Record the kill attempt
 	if err := s.service.db.RecordKillSwitchAttempt("kill"); err != nil {
-		log.Printf("Error recording kill switch attempt: %v", err)
+		slog.Error("error recording kill switch attempt", "err", err)
 	}
 
 	// Clean up old attempts (older than 5 minutes)
 	if err := s.service.db.CleanupOldKillSwitchAttempts(5 * time.Minute); err != nil {
-		log.Printf("Error cleaning up old kill switch attempts: %v", err)
+		slog.Error("error cleaning up old kill switch attempts", "err", err)
 	}
 
 	// Check if we have 3 attempts in the last minute
 	count, err := s.service.db.GetRecentKillSwitchAttempts("kill", time.Minute)
 	if err != nil {
-		log.Printf("Error checking recent kill switch attempts: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		slog.Error("error checking recent kill switch attempts", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if count >= 3 {
 		// Kill the scheduler
 		if err := s.service.db.SetSchedulerStatus(false); err != nil {
-			log.Printf("Error setting scheduler status: %v", err)
-			http.Error(w, "Failed to kill scheduler", http.StatusInternalServerError)
+			slog.Error("setting scheduler status", "err", err)
+			http.Error(w, "failed to kill scheduler", http.StatusInternalServerError)
 			return
 		}
 
-		log.Println("Kill switch activated - scheduler stopped")
+		slog.Info("kill switch activated - scheduler stopped")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
+		if err := json.NewEncoder(w).Encode(map[string]string{
 			"status":  "killing scheduler",
 			"message": "Scheduler has been stopped",
-		})
+		}); err != nil {
+			slog.Error("encoding kill switch response", "err", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
 		return
 	}
 
 	// Not enough attempts yet
 	attemptsRemaining := 3 - count
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":             "attempt recorded",
 		"attempts":           count,
 		"attempts_remaining": attemptsRemaining,
 		"message":            fmt.Sprintf("Need %d more attempts within 1 minute to kill scheduler", attemptsRemaining),
-	})
+	}); err != nil {
+		slog.Error("encoding kill switch response", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 // handleRestart handles the restart endpoint
@@ -601,58 +606,64 @@ func (s *APIServer) handleRestart(w http.ResponseWriter, r *http.Request) {
 	// Check if the API key matches the stored restart key
 	storedKey, err := s.service.db.GetCredential("kill_restart_api_key")
 	if err != nil {
-		log.Printf("Error retrieving restart API key: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		slog.Error("error retrieving restart API key", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if storedKey == "" || apiKey != storedKey {
-		http.Error(w, "Invalid API key", http.StatusUnauthorized)
+		http.Error(w, "invalid API key", http.StatusUnauthorized)
 		return
 	}
 
 	// Record the restart attempt
 	if err := s.service.db.RecordKillSwitchAttempt("restart"); err != nil {
-		log.Printf("Error recording restart attempt: %v", err)
+		slog.Error("recording restart attempt", "err", err)
 	}
 
 	// Clean up old attempts (older than 5 minutes)
 	if err := s.service.db.CleanupOldKillSwitchAttempts(5 * time.Minute); err != nil {
-		log.Printf("Error cleaning up old restart attempts: %v", err)
+		slog.Error("cleaning up old restart attempts", "err", err)
 	}
 
 	// Check if we have 3 attempts in the last minute
 	count, err := s.service.db.GetRecentKillSwitchAttempts("restart", time.Minute)
 	if err != nil {
-		log.Printf("Error checking recent restart attempts: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		slog.Error("checking recent restart attempts", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if count >= 3 {
 		// Restart the scheduler
 		if err := s.service.db.SetSchedulerStatus(true); err != nil {
-			log.Printf("Error setting scheduler status: %v", err)
-			http.Error(w, "Failed to restart scheduler", http.StatusInternalServerError)
+			slog.Error("setting scheduler status", "err", err)
+			http.Error(w, "failed to restart scheduler", http.StatusInternalServerError)
 			return
 		}
 
-		log.Println("Scheduler restarted via restart endpoint")
+		slog.Info("scheduler restarted via restart endpoint")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
+		if err := json.NewEncoder(w).Encode(map[string]string{
 			"status":  "restarting scheduler",
 			"message": "Scheduler has been restarted",
-		})
+		}); err != nil {
+			slog.Error("encoding restart response", "err", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
 		return
 	}
 
 	// Not enough attempts yet
 	attemptsRemaining := 3 - count
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":             "attempt recorded",
 		"attempts":           count,
 		"attempts_remaining": attemptsRemaining,
 		"message":            fmt.Sprintf("Need %d more attempts within 1 minute to restart scheduler", attemptsRemaining),
-	})
+	}); err != nil {
+		slog.Error("encoding restart response", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }

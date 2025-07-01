@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 	"time"
+	"log/slog"
 )
 
 // runPassthroughTest runs a simple test to verify passthrough works
@@ -97,7 +97,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	
@@ -119,7 +119,7 @@ func (s *server) SubmitCertificate(ctx context.Context, req *v1.SubmitCertificat
 	}
 	
 	msg := fmt.Sprintf("RECEIVED network %%d\n", networkID)
-	log.Print(msg)
+	slog.Info(msg)
 	
 	// Write to file
 	f, _ := os.OpenFile("passthrough-receiver.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -142,7 +142,7 @@ func main() {
 	s := grpc.NewServer()
 	v1.RegisterCertificateSubmissionServiceServer(s, &server{})
 	
-	log.Println("Receiver started")
+	slog.Info("receiver started")
 	s.Serve(lis)
 }
 `
