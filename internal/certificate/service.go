@@ -161,11 +161,15 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, aggSenderAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(aggSenderAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to aggsender at %s: %v", aggSenderAddr, err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Error("failed to close gRPC connection to aggsender: ", err)
+		}
+	}()
 
 	// Create client
 	client := v1.NewCertificateSubmissionServiceClient(conn)

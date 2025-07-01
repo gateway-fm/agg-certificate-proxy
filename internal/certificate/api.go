@@ -508,6 +508,8 @@ func (s *APIServer) Start(addr string) error {
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		return err
 	}
+
+	return nil
 }
 
 // handleKillSwitch handles the kill switch endpoint
