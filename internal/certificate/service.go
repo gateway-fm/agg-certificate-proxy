@@ -11,9 +11,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
+	"log/slog"
+
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
-	"log/slog"
 )
 
 // Db defines the interface for database operations.
@@ -167,7 +168,7 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			slog.Error("failed to close gRPC connection to aggsender: ", err)
+			slog.Error("failed to close gRPC connection to aggsender", "err", err)
 		}
 	}()
 

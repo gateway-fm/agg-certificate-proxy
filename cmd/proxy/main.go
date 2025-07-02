@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
+	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -11,13 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
-	"log/slog"
-	"log"
-
+	proxyhealth "github.com/gateway-fm/agg-certificate-proxy/internal/health"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -46,12 +47,15 @@ func main() {
 	}
 	defer func() {
 		if closeErr := db.Close(); closeErr != nil {
-			slog.Error("failed to close database: ", closeErr)
+			slog.Error("failed to close database", "err", closeErr)
 		}
 	}()
 
-	// Create service
+	// Create certificate service
 	service := certificate.NewService(db)
+
+	// Create health service
+	healthService := proxyhealth.NewService()
 
 	// Store API keys if provided
 	if killSwitchAPIKey == nil || len(*killSwitchAPIKey) == 0 {
@@ -149,11 +153,23 @@ func main() {
 		}
 	}()
 
-	// Create and start HTTP server
+	// Create and register HTTP handlers
+	// First register certificate API handlers
 	apiServer := certificate.NewAPIServer(service)
 	apiServer.RegisterHandlers()
+
+	// Then register health API handlers
+	healthApi := proxyhealth.NewApi(healthService)
+	healthApi.RegisterHandlers()
+
+	// Start HTTP server
+	httpServer := &http.Server{
+		Addr:    *httpAddr,
+		Handler: http.DefaultServeMux,
+	}
 	go func() {
-		if err := apiServer.Start(*httpAddr); err != nil {
+		slog.Info("http server listening", "address", *httpAddr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("failed to start HTTP server: %v", err)
 		}
 	}()
@@ -165,20 +181,39 @@ func main() {
 
 	slog.Info("shutting down...")
 
-	// Graceful shutdown
-	stopCh := make(chan struct{})
+	// Signal health service that we're shutting down
+	healthService.Shutdown()
+
+	// Give health checks time to detect shutdown status
+	time.Sleep(200 * time.Millisecond)
+
+	// Graceful shutdown of gRPC server first
+	grpcStopCh := make(chan struct{})
 	go func() {
 		grpcServer.GracefulStop()
-		close(stopCh)
+		close(grpcStopCh)
 	}()
 
+	// Wait for gRPC to shut down
 	select {
-	case <-stopCh:
+	case <-grpcStopCh:
 		slog.Info("gRPC server shut down gracefully")
 	case <-time.After(10 * time.Second):
-		slog.Warn("graceful shutdown timed out, forcing stop")
+		slog.Warn("gRPC graceful shutdown timed out, forcing stop")
 		grpcServer.Stop()
 	}
+
+	// Now shut down HTTP server after a brief delay
+	// This allows any final health checks to complete
+	time.Sleep(500 * time.Millisecond)
+
+	httpShutdownCtx, httpCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer httpCancel()
+
+	if err := httpServer.Shutdown(httpShutdownCtx); err != nil {
+		slog.Error("HTTP server shutdown error", "err", err)
+	}
+	slog.Info("HTTP server shut down")
 
 	slog.Info("shutdown complete")
 }
