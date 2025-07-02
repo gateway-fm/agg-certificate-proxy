@@ -72,7 +72,7 @@ func runPassthroughTest() {
 	time.Sleep(2 * time.Second)
 
 	receiverLog, _ := os.ReadFile("passthrough-receiver.log")
-	if strings.Contains(string(receiverLog), "RECEIVED network 10") {
+	if strings.Contains(string(receiverLog), "RECEIVED CERTIFICATE for network 10") {
 		fmt.Println("   ✅ SUCCESS: Certificate passed through!")
 	} else {
 		fmt.Println("   ❌ FAILED: Certificate was not received")
@@ -91,79 +91,21 @@ func runPassthroughTest() {
 
 // startSimpleReceiver starts a very simple mock receiver
 func startSimpleReceiver(port string) (*exec.Cmd, error) {
-	receiverCode := `
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-	"net"
-	"os"
-	
-	"google.golang.org/grpc"
-	
-	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
-	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
-	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
-)
-
-type server struct {
-	v1.UnimplementedCertificateSubmissionServiceServer
-}
-
-func (s *server) SubmitCertificate(ctx context.Context, req *v1.SubmitCertificateRequest) (*v1.SubmitCertificateResponse, error) {
-	networkID := uint32(0)
-	if req.Certificate != nil {
-		networkID = req.Certificate.NetworkId
+	// Build the receiver if it doesn't exist
+	receiverBinary := "./receiver/receiver"
+	if _, err := os.Stat(receiverBinary); os.IsNotExist(err) {
+		buildCmd := exec.Command("go", "build", "-o", receiverBinary, "./receiver/main.go")
+		buildOut, err := buildCmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build receiver: %v\nOutput: %s", err, string(buildOut))
+		}
 	}
-	
-	msg := fmt.Sprintf("RECEIVED network %%d\n", networkID)
-	log.Print(msg)
-	
-	// Write to file
-	f, _ := os.OpenFile("passthrough-receiver.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	f.WriteString(msg)
-	f.Close()
-	
-	return &v1.SubmitCertificateResponse{
-		CertificateId: &typesv1.CertificateId{
-			Value: &interopv1.FixedBytes32{Value: []byte{1, 2, 3}},
-		},
-	}, nil
-}
 
-func main() {
-	lis, err := net.Listen("tcp", "127.0.0.1:%s")
-	if err != nil {
-		log.Fatal("Failed to listen: ", err)
-	}
-	
-	s := grpc.NewServer()
-	v1.RegisterCertificateSubmissionServiceServer(s, &server{})
-	
-	log.Println("Receiver started")
-	s.Serve(lis)
-}
-`
-	// Format the code with the port
-	receiverCode = fmt.Sprintf(receiverCode, port, port)
-
-	// Write to temp file
-	tmpFile := "simple_receiver_temp.go"
-	os.WriteFile(tmpFile, []byte(receiverCode), 0644)
-
-	// Build
-	buildCmd := exec.Command("go", "build", "-o", "simple_receiver", tmpFile)
-	if err := buildCmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to build receiver: %v", err)
-	}
-	os.Remove(tmpFile)
-
-	// Run
-	cmd := exec.Command("./simple_receiver")
+	// Run the receiver with specified port
+	cmd := exec.Command(receiverBinary, "-port", port, "-log", "passthrough-receiver.log")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start receiver: %v", err)
 	}
@@ -173,12 +115,6 @@ func main() {
 	if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
 		return nil, fmt.Errorf("receiver process died immediately after starting - likely port already in use")
 	}
-
-	// Cleanup after 30 seconds
-	go func() {
-		time.Sleep(30 * time.Second)
-		os.Remove("simple_receiver")
-	}()
 
 	return cmd, nil
 }

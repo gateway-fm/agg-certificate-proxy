@@ -1,5 +1,13 @@
 # AggLayer Certificate Proxy Tests
 
+## Structure
+
+- `main.go` - Test runner entry point
+- `test_kill_switch.go` - Kill switch functionality tests
+- `test_passthrough.go` - Passthrough functionality tests
+- `receiver/` - Mock gRPC receiver used by tests
+  - `main.go` - Mock aggsender implementation
+
 ## Quick Start
 
 ```bash
