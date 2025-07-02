@@ -52,21 +52,25 @@ func main() {
 	service := certificate.NewService(db)
 
 	// Store API keys if provided
-	if *killSwitchAPIKey != "" {
-		if err := db.SetCredential("kill_switch_api_key", *killSwitchAPIKey); err != nil {
-			slog.Error("failed to set kill switch API key", "err", err)
-		} else {
-			slog.Info("kill switch API key configured")
-		}
+	if killSwitchAPIKey == nil || len(*killSwitchAPIKey) == 0 {
+		slog.Error("no kill switch API key provided - cannot start")
+		return
 	}
+	if err := db.SetCredential("kill_switch_api_key", *killSwitchAPIKey); err != nil {
+		slog.Error("failed to set kill switch API key", "err", err)
+		return
+	}
+	slog.Info("kill switch API key configured")
 
-	if *killRestartAPIKey != "" {
-		if err := db.SetCredential("kill_restart_api_key", *killRestartAPIKey); err != nil {
-			slog.Error("failed to set kill restart API key", "err", err)
-		} else {
-			slog.Info("kill restart API key configured")
-		}
+	if killRestartAPIKey == nil || len(*killRestartAPIKey) == 0 {
+		slog.Error("no kill restart API key provided - cannot start")
+		return
 	}
+	if err := db.SetCredential("kill_restart_api_key", *killRestartAPIKey); err != nil {
+		slog.Error("failed to set kill restart API key", "err", err)
+		return
+	}
+	slog.Info("kill restart API key configured")
 
 	// Update aggsender address if provided
 	if *aggsenderAddr != "" {

@@ -37,12 +37,17 @@ func runPassthroughTest() {
 	defer receiverCmd.Process.Kill()
 	time.Sleep(2 * time.Second)
 
+	killKey := "test-kill-key"
+	restartKey := "test-restart-key"
+
 	// Start proxy
 	fmt.Println("2. Starting proxy...")
 	proxyCmd := exec.Command("./proxy",
 		"--db", "passthrough-test.db",
 		"--http", ":8080",
 		"--grpc", ":50051",
+		"--kill-switch-api-key", killKey,
+		"--kill-restart-api-key", restartKey,
 		"--aggsender-addr", "127.0.0.1:50052",
 		"--delayed-chains", "1,137", // Only delay chains 1 and 137
 	)
