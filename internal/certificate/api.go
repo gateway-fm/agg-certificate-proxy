@@ -2,6 +2,7 @@ package certificate
 
 import (
 	"encoding/json"
+	"embed"
 	"fmt"
 	"html/template"
 	"math/big"
@@ -9,7 +10,21 @@ import (
 	"strconv"
 	"time"
 	"log/slog"
+	"log"
 )
+
+//go:embed templates
+var templateFolder embed.FS
+
+var homepageTemplate *template.Template
+
+func init() {
+	parsed, err := template.ParseFS(templateFolder, "templates/index.tmpl.html")
+	if err != nil {
+		log.Fatalf("could not parse the homepage template file: %s", err)
+	}
+	homepageTemplate = parsed
+}
 
 // APIServer handles HTTP requests.
 type APIServer struct {
@@ -28,191 +43,6 @@ func (s *APIServer) RegisterHandlers() {
 	http.HandleFunc("/kill", s.handleKillSwitch)
 	http.HandleFunc("/restart", s.handleRestart)
 }
-
-const tpl = `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Certificates</title>
-    <style>
-        body { font-family: sans-serif; margin: 20px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; table-layout: fixed; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
-        th { background-color: #f2f2f2; }
-        .pending { background-color: #fff3cd; }
-        .processed { background-color: #d4edda; }
-        .metadata { 
-            font-size: 0.75em; 
-            max-width: 300px;
-            overflow: hidden;
-            position: relative;
-        }
-        .metadata pre {
-            margin: 0;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            max-height: 150px;
-            overflow-y: auto;
-            background-color: #f5f5f5;
-            padding: 5px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-        }
-        .config { margin-bottom: 20px; padding: 10px; background-color: #e9ecef; border-radius: 5px; }
-        
-        /* Scheduler status */
-        .scheduler-status {
-            margin-bottom: 20px;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid;
-        }
-        .scheduler-active {
-            background-color: #d4edda;
-            border-color: #c3e6cb;
-            color: #155724;
-        }
-        .scheduler-stopped {
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
-        }
-        
-        /* Held values section */
-        .held-values {
-            margin-bottom: 20px;
-            padding: 10px;
-            background-color: #f8f9fa;
-            border-radius: 5px;
-            border: 1px solid #dee2e6;
-        }
-        .held-values h3 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            color: #495057;
-        }
-        .chain-totals {
-            width: auto;
-            min-width: 400px;
-            margin: 0;
-        }
-        .chain-totals th {
-            background-color: #6c757d;
-            color: white;
-        }
-        .chain-totals td {
-            background-color: white;
-        }
-        
-        /* Column widths */
-        th:nth-child(1), td:nth-child(1) { width: 5%; }  /* ID */
-        th:nth-child(2), td:nth-child(2) { width: 8%; }  /* Network ID */
-        th:nth-child(3), td:nth-child(3) { width: 8%; }  /* Height */
-        th:nth-child(4), td:nth-child(4) { width: 12%; } /* Received At */
-        th:nth-child(5), td:nth-child(5) { width: 12%; } /* Will Send At */
-        th:nth-child(6), td:nth-child(6) { width: 15%; } /* Status */
-        th:nth-child(7), td:nth-child(7) { width: 10%; } /* Total Amount */
-        th:nth-child(8), td:nth-child(8) { width: 10%; } /* Exit Count */
-        th:nth-child(9), td:nth-child(9) { width: 20%; } /* Metadata */
-        
-        /* Expandable metadata */
-        .metadata-toggle {
-            cursor: pointer;
-            color: #007bff;
-            text-decoration: underline;
-            font-size: 0.9em;
-        }
-        .metadata-full {
-            display: none;
-            margin-top: 10px;
-        }
-        .metadata-full.show {
-            display: block;
-        }
-    </style>
-    <script>
-        function toggleMetadata(id) {
-            var element = document.getElementById('metadata-' + id);
-            if (element.classList.contains('show')) {
-                element.classList.remove('show');
-            } else {
-                element.classList.add('show');
-            }
-        }
-    </script>
-</head>
-<body>
-    <h1>Agg Certificate Proxy</h1>
-    <div class="config">
-        <strong>Current Configuration:</strong><br>
-        Delay: {{.Config.Delay}}<br>
-        Current Time: {{.Config.CurrentTime}}
-    </div>
-    
-    <div class="scheduler-status {{if .SchedulerActive}}scheduler-active{{else}}scheduler-stopped{{end}}">
-        <strong>Scheduler Status:</strong> {{if .SchedulerActive}}Active (Processing Certificates){{else}}STOPPED (Kill Switch Activated){{end}}
-    </div>
-    
-    <div class="held-values">
-        <h3>Held Certificates Total Value by Chain</h3>
-        <table class="chain-totals">
-            <tr>
-                <th>Chain ID</th>
-                <th>Total Held Amount</th>
-                <th>Certificate Count</th>
-            </tr>
-            {{range $chainID, $info := .ChainTotals}}
-            <tr>
-                <td>{{$chainID}}</td>
-                <td>{{$info.TotalAmount}}</td>
-                <td>{{$info.CertCount}}</td>
-            </tr>
-            {{else}}
-            <tr>
-                <td colspan="3" style="text-align: center; font-style: italic;">No pending certificates</td>
-            </tr>
-            {{end}}
-        </table>
-    </div>
-    
-    <h2>Certificates</h2>
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Network ID</th>
-            <th>Height</th>
-            <th>Received At</th>
-            <th>Will Send At</th>
-            <th>Status</th>
-            <th>Total Amount</th>
-            <th>Exit Count</th>
-            <th>Metadata</th>
-        </tr>
-        {{range .Certificates}}
-        <tr class="{{if .ProcessedAt.Valid}}processed{{else}}pending{{end}}">
-            <td>{{.ID}}</td>
-            <td>{{.NetworkID}}</td>
-            <td>{{.Height}}</td>
-            <td>{{.ReceivedAt.Format "2006-01-02 15:04:05"}}</td>
-            <td>{{.WillSendAt.Format "2006-01-02 15:04:05"}}</td>
-            <td>{{if .ProcessedAt.Valid}}Processed at {{.ProcessedAt.Time.Format "2006-01-02 15:04:05"}}{{else}}Pending{{end}}</td>
-            <td>{{.TotalAmount}}</td>
-            <td>BE: {{.BridgeExitCount}}, IBE: {{.ImportedBridgeExitCount}}</td>
-            <td class="metadata">
-                <pre>{{.PrettyMetadata}}</pre>
-                {{if .HasFullMetadata}}
-                <span class="metadata-toggle" onclick="toggleMetadata({{.ID}})">Show full metadata</span>
-                <div id="metadata-{{.ID}}" class="metadata-full">
-                    <pre>{{.FullPrettyMetadata}}</pre>
-                </div>
-                {{end}}
-            </td>
-        </tr>
-        {{end}}
-    </table>
-</body>
-</html>
-`
 
 // CertificateView extends Certificate with calculated fields for display
 type CertificateView struct {
@@ -475,13 +305,7 @@ func (s *APIServer) viewCerts(w http.ResponseWriter, r *http.Request) {
 		Certificates:    certViews,
 	}
 
-	t, err := template.New("webpage").Parse(tpl)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to parse template: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	err = t.Execute(w, data)
+	err = homepageTemplate.Execute(w, data)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to execute template: %v", err), http.StatusInternalServerError)
 	}
