@@ -14,7 +14,6 @@ import (
 type Scheduler struct {
 	service   *Service
 	scheduler gocron.Scheduler
-	ctx       context.Context
 	wg        sync.WaitGroup
 }
 
@@ -28,13 +27,13 @@ func NewScheduler(ctx context.Context, service *Service, interval time.Duration)
 	scheduler := &Scheduler{
 		service:   service,
 		scheduler: s,
-		ctx:       ctx,
 	}
 
 	_, err = s.NewJob(
 		gocron.DurationJob(interval),
 		gocron.NewTask(scheduler.processCertificates),
 		gocron.WithSingletonMode(gocron.LimitModeReschedule),
+		gocron.WithContext(ctx),
 	)
 	if err != nil {
 		return nil, err
@@ -47,24 +46,9 @@ func NewScheduler(ctx context.Context, service *Service, interval time.Duration)
 func (s *Scheduler) Start() {
 	slog.Info("starting certificate scheduler...")
 	s.scheduler.Start()
-
-	// Monitor context cancellation in a separate goroutine
-	go func() {
-		<-s.ctx.Done()
-		slog.Info("scheduler context cancelled, initiating stop...")
-		s.stop()
-	}()
 }
 
-// Stop halts the processing loop gracefully.
-// This is now called automatically when context is cancelled.
 func (s *Scheduler) Stop() {
-	// Just delegate to internal stop
-	s.stop()
-}
-
-// stop is the internal stop implementation
-func (s *Scheduler) stop() {
 	slog.Info("stopping certificate scheduler...")
 
 	// Stop accepting new jobs
@@ -84,24 +68,12 @@ func (s *Scheduler) stop() {
 	slog.Info("certificate scheduler stopped")
 }
 
-// IsProcessing returns true if there are active tasks running.
-func (s *Scheduler) IsProcessing() bool {
-	// Since we can't check WaitGroup state directly, we'll track this differently
-	// For now, we can simply check if the scheduler context is done
-	select {
-	case <-s.ctx.Done():
-		return false
-	default:
-		// If needed, we could add an atomic counter for active tasks
-		return true
-	}
-}
-
-// processCertificates is the task that runs periodically.
-func (s *Scheduler) processCertificates() {
+// processCertificates is the task that runs periodically - the context is passed by the gocron library
+// which is assigned as part of the Scheduler constructor
+func (s *Scheduler) processCertificates(ctx context.Context) {
 	// Check if we're shutting down before starting
 	select {
-	case <-s.ctx.Done():
+	case <-ctx.Done():
 		slog.Info("scheduler shutting down, skipping certificate processing")
 		return
 	default:
@@ -111,12 +83,7 @@ func (s *Scheduler) processCertificates() {
 	s.wg.Add(1)
 	defer s.wg.Done()
 
-	// Create a context for this processing run
-	// TODO: Update ProcessPendingCertificates to accept context for proper cancellation
-	// ctx, cancel := context.WithCancel(s.ctx)
-	// defer cancel()
-
-	// Check if scheduler is active in the database
+	// Check if Scheduler is active in the database
 	isActive, err := s.service.db.GetSchedulerStatus()
 	if err != nil {
 		slog.Error("error checking scheduler status", "err", err)
@@ -132,7 +99,7 @@ func (s *Scheduler) processCertificates() {
 
 	// Pass context to processing method so it can be cancelled
 	// For now, use the existing method until we update it
-	s.service.ProcessPendingCertificates()
+	s.service.ProcessPendingCertificates(ctx)
 
 	slog.Info("scheduler finished processing certificates")
 }

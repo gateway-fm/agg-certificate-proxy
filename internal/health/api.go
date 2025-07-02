@@ -3,16 +3,14 @@ package health
 import (
 	"encoding/json"
 	"net/http"
+	"log/slog"
 )
 
 type Api struct {
-	statusService *Service
 }
 
-func NewApi(statusService *Service) *Api {
-	return &Api{
-		statusService: statusService,
-	}
+func NewApi() *Api {
+	return &Api{}
 }
 
 func (api *Api) RegisterHandlers() {
@@ -20,18 +18,23 @@ func (api *Api) RegisterHandlers() {
 }
 
 func (api *Api) GetHealth(w http.ResponseWriter, r *http.Request) {
-	if api.statusService.IsShuttingDown() {
+	ctx := r.Context()
+	select {
+	case <-ctx.Done():
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status": "shutting down",
 		})
 		return
+	default:
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status": "ok",
-	})
+	}); err != nil {
+		slog.Error("encoding health response failed", "err", err)
+	}
 }

@@ -19,6 +19,8 @@ import (
 	proxyhealth "github.com/gateway-fm/agg-certificate-proxy/internal/health"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
+	"errors"
+	"sync"
 )
 
 func main() {
@@ -56,10 +58,7 @@ func main() {
 	}()
 
 	// Create certificate service
-	service := certificate.NewService(db)
-
-	// Create health service with root context
-	healthService := proxyhealth.NewService(ctx)
+	certificateService := certificate.NewService(db)
 
 	// Store API keys if provided
 	if killSwitchAPIKey == nil || len(*killSwitchAPIKey) == 0 {
@@ -110,7 +109,7 @@ func main() {
 	if *delayedChainsStr != "" {
 		chains := parseChainIDs(*delayedChainsStr)
 		if len(chains) > 0 {
-			if err := service.SetDelayedChains(chains); err != nil {
+			if err := certificateService.SetDelayedChains(chains); err != nil {
 				slog.Error("failed to set delayed chains", "err", err)
 			} else {
 				slog.Info("updated delayed chains", "val", chains)
@@ -119,13 +118,13 @@ func main() {
 	}
 
 	// Log current configuration
-	currentChains, err := service.GetDelayedChains()
+	currentChains, err := certificateService.GetDelayedChains()
 	if err == nil {
 		slog.Info("configured delayed chains", "val", currentChains)
 	}
 
 	// Get delay and display in human-readable format
-	delaySeconds, err := service.GetConfigValue("delay_seconds")
+	delaySeconds, err := certificateService.GetConfigValue("delay_seconds")
 	if err != nil {
 		slog.Error("failed to get delay_seconds from config", "err", err)
 		return
@@ -137,15 +136,15 @@ func main() {
 	}
 
 	// Start scheduler for processing delayed certificates
-	scheduler, err := certificate.NewScheduler(ctx, service, interval)
+	scheduler, err := certificate.NewScheduler(ctx, certificateService, interval)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
 	}
-	go scheduler.Start()
+	scheduler.Start()
 
 	// Create and register gRPC server
 	grpcServer := grpc.NewServer()
-	certGrpcServer := certificate.NewGRPCServer(service)
+	certGrpcServer := certificate.NewGRPCServer(certificateService)
 	certGrpcServer.Register(grpcServer)
 
 	// Start gRPC server in goroutine
@@ -158,11 +157,11 @@ func main() {
 
 	// Create and register HTTP handlers
 	// First register certificate API handlers
-	apiServer := certificate.NewAPIServer(service)
+	apiServer := certificate.NewAPIServer(certificateService)
 	apiServer.RegisterHandlers()
 
 	// Then register health API handlers
-	healthApi := proxyhealth.NewApi(healthService)
+	healthApi := proxyhealth.NewApi()
 	healthApi.RegisterHandlers()
 
 	// Start HTTP server with cancellation context
@@ -175,7 +174,7 @@ func main() {
 	}
 	go func() {
 		slog.Info("http server listening", "address", *httpAddr)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("failed to start HTTP server: %v", err)
 		}
 	}()
@@ -197,24 +196,13 @@ func main() {
 	// Cancel the root context to signal all components
 	cancel()
 
-	// Give components a moment to react to context cancellation
-	time.Sleep(100 * time.Millisecond)
-
-	// Create a shutdown context with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-
 	// Create a channel to coordinate shutdown steps
-	shutdownComplete := make(chan struct{})
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
 
 	go func() {
-		// Wait for scheduler to finish (it will stop automatically via context)
-		slog.Info("waiting for scheduler to complete shutdown...")
-		// The scheduler's Start() method monitors context and calls stop() automatically
-
-		// Give scheduler time to finish its tasks
-		// In a production system, you might want to track scheduler completion
-		time.Sleep(2 * time.Second)
+		defer wg.Done()
+		scheduler.Stop()
 
 		// Graceful shutdown of gRPC server
 		slog.Info("shutting down gRPC server...")
@@ -224,22 +212,15 @@ func main() {
 		// Graceful shutdown of HTTP server
 		// This will wait for all active HTTP requests to complete
 		slog.Info("shutting down HTTP server...")
+		shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer shutdownCancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			slog.Error("HTTP server shutdown error", "err", err)
 		}
 		slog.Info("HTTP server shut down")
-
-		close(shutdownComplete)
 	}()
 
-	// Wait for shutdown to complete or timeout
-	select {
-	case <-shutdownComplete:
-		slog.Info("graceful shutdown completed")
-	case <-shutdownCtx.Done():
-		slog.Warn("shutdown timeout exceeded, forcing shutdown")
-		grpcServer.Stop() // Force stop gRPC if still running
-	}
+	wg.Wait()
 
 	slog.Info("shutdown complete")
 }
