@@ -1,16 +1,17 @@
 package certificate
 
 import (
-	"encoding/json"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strconv"
 	"time"
-	"log/slog"
-	"log"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -325,16 +326,6 @@ func (s *APIServer) viewConfig(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(config); err != nil {
 		http.Error(w, fmt.Sprintf("failed to encode config: %v", err), http.StatusInternalServerError)
 	}
-}
-
-// Start starts the HTTP server.
-func (s *APIServer) Start(addr string) error {
-	slog.Info("http server listening", "address", addr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // handleKillSwitch handles the kill switch endpoint

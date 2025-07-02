@@ -3,11 +3,12 @@ package certificate
 import (
 	"database/sql"
 	"fmt"
-	"time"
 	"log/slog"
+	"time"
+
+	"errors"
 
 	_ "github.com/mattn/go-sqlite3"
-	"errors"
 )
 
 type SqliteStore struct {
@@ -171,7 +172,7 @@ func (s *SqliteStore) GetProcessableCertificates() ([]Certificate, error) {
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			slog.Error("failed to close certificates query: %v\n", closeErr)
+			slog.Error("failed to close certificates query", "err", closeErr)
 		}
 	}()
 
@@ -204,7 +205,7 @@ func (s *SqliteStore) GetCertificates() ([]Certificate, error) {
 	}
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			slog.Error("failed to close certificates query: %v\n", closeErr)
+			slog.Error("failed to close certificates query", "err", closeErr)
 		}
 	}()
 
