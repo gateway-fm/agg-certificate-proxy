@@ -15,23 +15,20 @@ type Scheduler struct {
 	service   *Service
 	scheduler gocron.Scheduler
 	ctx       context.Context
-	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 }
 
-// NewScheduler creates a new scheduler.
-func NewScheduler(service *Service, interval time.Duration) (*Scheduler, error) {
+// NewScheduler creates a new scheduler with a parent context.
+func NewScheduler(ctx context.Context, service *Service, interval time.Duration) (*Scheduler, error) {
 	s, err := gocron.NewScheduler()
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	scheduler := &Scheduler{
 		service:   service,
 		scheduler: s,
 		ctx:       ctx,
-		cancel:    cancel,
 	}
 
 	_, err = s.NewJob(
@@ -40,7 +37,6 @@ func NewScheduler(service *Service, interval time.Duration) (*Scheduler, error) 
 		gocron.WithSingletonMode(gocron.LimitModeReschedule),
 	)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
@@ -51,14 +47,25 @@ func NewScheduler(service *Service, interval time.Duration) (*Scheduler, error) 
 func (s *Scheduler) Start() {
 	slog.Info("starting certificate scheduler...")
 	s.scheduler.Start()
+
+	// Monitor context cancellation in a separate goroutine
+	go func() {
+		<-s.ctx.Done()
+		slog.Info("scheduler context cancelled, initiating stop...")
+		s.stop()
+	}()
 }
 
 // Stop halts the processing loop gracefully.
+// This is now called automatically when context is cancelled.
 func (s *Scheduler) Stop() {
-	slog.Info("stopping certificate scheduler...")
+	// Just delegate to internal stop
+	s.stop()
+}
 
-	// Signal cancellation
-	s.cancel()
+// stop is the internal stop implementation
+func (s *Scheduler) stop() {
+	slog.Info("stopping certificate scheduler...")
 
 	// Stop accepting new jobs
 	if err := s.scheduler.StopJobs(); err != nil {

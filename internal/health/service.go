@@ -3,20 +3,19 @@ package health
 import "context"
 
 type Service struct {
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx context.Context
 }
 
-func NewService() *Service {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewService(ctx context.Context) *Service {
 	return &Service{
-		ctx:    ctx,
-		cancel: cancel,
+		ctx: ctx,
 	}
 }
 
+// Shutdown is now deprecated - context cancellation handles it
+// Keeping for backward compatibility but it does nothing
 func (s *Service) Shutdown() {
-	s.cancel()
+	// No-op - context cancellation handles shutdown
 }
 
 func (s *Service) IsShuttingDown() bool {

@@ -100,7 +100,8 @@ func runGracefulShutdownTest() {
 
 	requiredLogEntries := []string{
 		"shutting down...",
-		"stopping scheduler and waiting for running tasks...",
+		"scheduler context cancelled, initiating stop...",
+		"waiting for scheduler to complete shutdown...",
 		"certificate scheduler stopped",
 		"gRPC server shut down",
 		"HTTP server shut down",

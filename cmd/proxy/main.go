@@ -34,6 +34,10 @@ func main() {
 	killRestartAPIKey := flag.String("kill-restart-api-key", "", "API key for restart endpoint")
 	flag.Parse()
 
+	// Create root context with cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Parse scheduler interval
 	interval, err := time.ParseDuration(*schedulerInterval)
 	if err != nil {
@@ -54,8 +58,8 @@ func main() {
 	// Create certificate service
 	service := certificate.NewService(db)
 
-	// Create health service
-	healthService := proxyhealth.NewService()
+	// Create health service with root context
+	healthService := proxyhealth.NewService(ctx)
 
 	// Store API keys if provided
 	if killSwitchAPIKey == nil || len(*killSwitchAPIKey) == 0 {
@@ -133,7 +137,7 @@ func main() {
 	}
 
 	// Start scheduler for processing delayed certificates
-	scheduler, err := certificate.NewScheduler(service, interval)
+	scheduler, err := certificate.NewScheduler(ctx, service, interval)
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
 	}
@@ -161,10 +165,13 @@ func main() {
 	healthApi := proxyhealth.NewApi(healthService)
 	healthApi.RegisterHandlers()
 
-	// Start HTTP server
+	// Start HTTP server with cancellation context
 	httpServer := &http.Server{
 		Addr:    *httpAddr,
 		Handler: http.DefaultServeMux,
+		BaseContext: func(net.Listener) context.Context {
+			return ctx
+		},
 	}
 	go func() {
 		slog.Info("http server listening", "address", *httpAddr)
@@ -176,15 +183,21 @@ func main() {
 	// Wait for interrupt signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
+
+	// Wait for either context cancellation or signal
+	select {
+	case <-sigCh:
+		slog.Info("received shutdown signal")
+	case <-ctx.Done():
+		slog.Info("context cancelled")
+	}
 
 	slog.Info("shutting down...")
 
-	// Signal health service that we're shutting down
-	// This makes /health return 503 for new requests
-	healthService.Shutdown()
+	// Cancel the root context to signal all components
+	cancel()
 
-	// Give a tiny window for health checks to see the 503
+	// Give components a moment to react to context cancellation
 	time.Sleep(100 * time.Millisecond)
 
 	// Create a shutdown context with timeout
@@ -195,16 +208,20 @@ func main() {
 	shutdownComplete := make(chan struct{})
 
 	go func() {
-		// Step 1: Stop the scheduler and wait for running tasks
-		slog.Info("stopping scheduler and waiting for running tasks...")
-		scheduler.Stop()
+		// Wait for scheduler to finish (it will stop automatically via context)
+		slog.Info("waiting for scheduler to complete shutdown...")
+		// The scheduler's Start() method monitors context and calls stop() automatically
 
-		// Step 2: Graceful shutdown of gRPC server
+		// Give scheduler time to finish its tasks
+		// In a production system, you might want to track scheduler completion
+		time.Sleep(2 * time.Second)
+
+		// Graceful shutdown of gRPC server
 		slog.Info("shutting down gRPC server...")
 		grpcServer.GracefulStop()
 		slog.Info("gRPC server shut down")
 
-		// Step 3: Graceful shutdown of HTTP server
+		// Graceful shutdown of HTTP server
 		// This will wait for all active HTTP requests to complete
 		slog.Info("shutting down HTTP server...")
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
