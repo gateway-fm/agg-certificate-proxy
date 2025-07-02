@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -15,6 +14,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
+	"log/slog"
+	"log"
 )
 
 func main() {
@@ -41,7 +42,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			slog.Error("failed to close database: ", closeErr)
+		}
+	}()
 
 	// Create service
 	service := certificate.NewService(db)
@@ -49,26 +54,26 @@ func main() {
 	// Store API keys if provided
 	if *killSwitchAPIKey != "" {
 		if err := db.SetCredential("kill_switch_api_key", *killSwitchAPIKey); err != nil {
-			log.Printf("Failed to set kill switch API key: %v", err)
+			slog.Error("failed to set kill switch API key", "err", err)
 		} else {
-			log.Printf("Kill switch API key configured")
+			slog.Info("kill switch API key configured")
 		}
 	}
 
 	if *killRestartAPIKey != "" {
 		if err := db.SetCredential("kill_restart_api_key", *killRestartAPIKey); err != nil {
-			log.Printf("Failed to set kill restart API key: %v", err)
+			slog.Error("failed to set kill restart API key", "err", err)
 		} else {
-			log.Printf("Kill restart API key configured")
+			slog.Info("kill restart API key configured")
 		}
 	}
 
 	// Update aggsender address if provided
 	if *aggsenderAddr != "" {
 		if err := db.SetConfigValue("aggsender_address", *aggsenderAddr); err != nil {
-			log.Printf("Failed to set aggsender address: %v", err)
+			slog.Error("failed to set aggsender address", "err", err)
 		} else {
-			log.Printf("Aggsender address set to: %s", *aggsenderAddr)
+			slog.Info("aggsender address set", "newVal", *aggsenderAddr)
 		}
 	}
 
@@ -76,15 +81,16 @@ func main() {
 	if *delayStr != "" {
 		duration, err := time.ParseDuration(*delayStr)
 		if err != nil {
-			log.Fatalf("Invalid delay duration '%s': %v", *delayStr, err)
+			slog.Error("invalid delay duration", "val", *delayStr, "err", err)
+			return
 		}
 
 		// Store as seconds in the database
 		seconds := int(duration.Seconds())
 		if err := db.SetConfigValue("delay_seconds", strconv.Itoa(seconds)); err != nil {
-			log.Printf("Failed to set delay: %v", err)
+			slog.Error("failed to set delay", "err", err)
 		} else {
-			log.Printf("Updated delay to %s (%d seconds)", duration, seconds)
+			slog.Info("updated delay", "duration", duration, "seconds", seconds)
 		}
 	}
 
@@ -93,9 +99,9 @@ func main() {
 		chains := parseChainIDs(*delayedChainsStr)
 		if len(chains) > 0 {
 			if err := service.SetDelayedChains(chains); err != nil {
-				log.Printf("Failed to set delayed chains: %v", err)
+				slog.Error("failed to set delayed chains", "err", err)
 			} else {
-				log.Printf("Updated delayed chains to: %v", chains)
+				slog.Info("updated delayed chains", "val", chains)
 			}
 		}
 	}
@@ -103,27 +109,18 @@ func main() {
 	// Log current configuration
 	currentChains, err := service.GetDelayedChains()
 	if err == nil {
-		log.Printf("Delayed chains: %v", currentChains)
+		slog.Info("configured delayed chains", "val", currentChains)
 	}
 
 	// Get delay and display in human-readable format
 	delaySeconds, err := service.GetConfigValue("delay_seconds")
-	if err == nil && delaySeconds != "" {
+	if err != nil {
+		slog.Error("failed to get delay_seconds from config", "err", err)
+		return
+	} else {
 		if seconds, err := strconv.Atoi(delaySeconds); err == nil {
 			duration := time.Duration(seconds) * time.Second
-			log.Printf("Delay: %s", duration)
-		}
-	} else {
-		// Check old delay_hours for backward compatibility
-		delayHours, err := service.GetConfigValue("delay_hours")
-		if err == nil && delayHours != "" {
-			if hours, err := strconv.Atoi(delayHours); err == nil {
-				seconds := hours * 3600
-				// Migrate to delay_seconds
-				db.SetConfigValue("delay_seconds", strconv.Itoa(seconds))
-				log.Printf("Migrated delay from %s hours to %d seconds", delayHours, seconds)
-				log.Printf("Delay: %s", time.Duration(seconds)*time.Second)
-			}
+			slog.Info("found delay", "val", duration)
 		}
 	}
 
@@ -142,23 +139,27 @@ func main() {
 
 	// Start gRPC server in goroutine
 	go func() {
-		log.Printf("Starting gRPC server on %s", *grpcAddr)
+		slog.Info("starting gRPC server", "address", *grpcAddr)
 		if err := startGRPCServer(grpcServer, *grpcAddr); err != nil {
-			log.Fatalf("Failed to start gRPC server: %v", err)
+			log.Fatalf("failed to start gRPC server: %v", err)
 		}
 	}()
 
 	// Create and start HTTP server
 	apiServer := certificate.NewAPIServer(service)
 	apiServer.RegisterHandlers()
-	go apiServer.Start(*httpAddr)
+	go func() {
+		if err := apiServer.Start(*httpAddr); err != nil {
+			log.Fatalf("failed to start HTTP server: %v", err)
+		}
+	}()
 
 	// Wait for interrupt signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
-	log.Println("Shutting down...")
+	slog.Info("shutting down...")
 
 	// Graceful shutdown
 	stopCh := make(chan struct{})
@@ -169,13 +170,13 @@ func main() {
 
 	select {
 	case <-stopCh:
-		log.Println("gRPC server shut down gracefully")
+		slog.Info("gRPC server shut down gracefully")
 	case <-time.After(10 * time.Second):
-		log.Println("Graceful shutdown timed out, forcing stop")
+		slog.Warn("graceful shutdown timed out, forcing stop")
 		grpcServer.Stop()
 	}
 
-	log.Println("Shutdown complete")
+	slog.Info("shutdown complete")
 }
 
 func parseChainIDs(chainsStr string) []uint32 {
@@ -184,7 +185,7 @@ func parseChainIDs(chainsStr string) []uint32 {
 	for _, part := range parts {
 		chainID, err := strconv.ParseUint(strings.TrimSpace(part), 10, 32)
 		if err != nil {
-			log.Printf("Invalid chain ID: %s", part)
+			slog.Warn("invalid chain ID", "id", part)
 			continue
 		}
 		chains = append(chains, uint32(chainID))
@@ -197,6 +198,6 @@ func startGRPCServer(server *grpc.Server, addr string) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
-	log.Printf("gRPC proxy listening on %s", addr)
+	slog.Info("gRPC proxy listening", "address", addr)
 	return server.Serve(lis)
 }

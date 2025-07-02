@@ -3,7 +3,6 @@ package certificate
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -14,12 +13,13 @@ import (
 
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
+	"log/slog"
 )
 
 // Db defines the interface for database operations.
 type Db interface {
 	Init() error
-	Close()
+	Close() error
 	StoreCertificate(rawProto []byte, metadata string) error
 	GetProcessableCertificates() ([]Certificate, error)
 	MarkCertificateProcessed(id int64) error
@@ -77,7 +77,7 @@ func (s *Service) GetDelayedChains() ([]uint32, error) {
 	for _, part := range parts {
 		chainID, err := strconv.ParseUint(strings.TrimSpace(part), 10, 32)
 		if err != nil {
-			log.Printf("warning: invalid chain ID in configuration: %s", part)
+			slog.Warn("invalid chain ID in configuration", "chain", part)
 			continue
 		}
 		chains = append(chains, uint32(chainID))
@@ -116,28 +116,28 @@ func (s *Service) SetDelayedChains(chains []uint32) error {
 
 // ProcessPendingCertificates processes certificates that are ready.
 func (s *Service) ProcessPendingCertificates() {
-	log.Println("Checking for processable certificates...")
+	slog.Info("checking for processable certificates...")
 	certs, err := s.db.GetProcessableCertificates()
 	if err != nil {
-		log.Printf("error getting processable certificates: %v", err)
+		slog.Error("error getting processable certificates", "err", err)
 		return
 	}
 
 	if len(certs) == 0 {
-		log.Println("No processable certificates found.")
+		slog.Info("no processable certificates found.")
 		return
 	}
 
-	log.Printf("Found %d processable certificates.", len(certs))
+	slog.Info("found processable certificates.", "count", len(certs))
 
 	for _, cert := range certs {
 		if err := s.SendToAggSender(cert); err != nil {
-			log.Printf("error sending certificate %d to agg sender: %v", cert.ID, err)
+			slog.Error("error sending certificate to agg sender", "certificate", cert.ID, "err", err)
 			continue
 		}
 
 		if err := s.db.MarkCertificateProcessed(cert.ID); err != nil {
-			log.Printf("error marking certificate %d as processed: %v", cert.ID, err)
+			slog.Error("error marking certificate as processed", "certificate", cert.ID, "err", err)
 		}
 	}
 }
@@ -145,15 +145,15 @@ func (s *Service) ProcessPendingCertificates() {
 // SendToAggSender sends a certificate to the agg sender.
 func (s *Service) SendToAggSender(cert Certificate) error {
 	if cert.ID == 0 {
-		log.Printf("Sending immediate certificate to aggsender...")
+		slog.Info("sending immediate certificate to aggsender...")
 	} else {
-		log.Printf("Sending certificate %d to aggsender...", cert.ID)
+		slog.Info("sending certificate to aggsender...", "certificate", cert.ID)
 	}
 
 	// Check if we have an aggsender_address in config
 	aggSenderAddr, err := s.db.GetConfigValue("aggsender_address")
 	if err != nil || aggSenderAddr == "" {
-		log.Printf("No aggsender_address configured, using default: localhost:50052")
+		slog.Warn("no aggsender_address configured, using default: localhost:50052")
 		aggSenderAddr = "localhost:50052" // Default to our mock receiver
 	}
 
@@ -161,11 +161,15 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, aggSenderAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(aggSenderAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to aggsender at %s: %v", aggSenderAddr, err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Error("failed to close gRPC connection to aggsender: ", err)
+		}
+	}()
 
 	// Create client
 	client := v1.NewCertificateSubmissionServiceClient(conn)
@@ -183,9 +187,9 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 
 	// Send the certificate
 	if cert.ID == 0 {
-		log.Printf("Forwarding immediate certificate (network %d) to aggsender at %s", certProto.GetNetworkId(), aggSenderAddr)
+		slog.Info("forwarding immediate certificate to aggsender", "network", certProto.GetNetworkId(), "address", aggSenderAddr)
 	} else {
-		log.Printf("Forwarding certificate %d (network %d) to aggsender at %s", cert.ID, certProto.GetNetworkId(), aggSenderAddr)
+		slog.Info("forwarding certificate to aggsender", "certificate", cert.ID, "network", certProto.GetNetworkId(), "address", aggSenderAddr)
 	}
 
 	resp, err := client.SubmitCertificate(ctx, req)
@@ -195,15 +199,15 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 
 	if resp.CertificateId != nil && resp.CertificateId.Value != nil {
 		if cert.ID == 0 {
-			log.Printf("Immediate certificate forwarded successfully, received ID: %x", resp.CertificateId.Value.Value)
+			slog.Info("immediate certificate forwarded successfully", "received-id", resp.CertificateId.Value.Value)
 		} else {
-			log.Printf("Certificate %d forwarded successfully, received ID: %x", cert.ID, resp.CertificateId.Value.Value)
+			slog.Info("certificate forwarded successfully", "certificate", cert.ID, "received-id", resp.CertificateId.Value.Value)
 		}
 	} else {
 		if cert.ID == 0 {
-			log.Printf("Immediate certificate forwarded successfully")
+			slog.Info("immediate certificate forwarded successfully")
 		} else {
-			log.Printf("Certificate %d forwarded successfully", cert.ID)
+			slog.Info("certificate forwarded successfully", "certificate", cert.ID)
 		}
 	}
 

@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 	"time"
+	"log"
 )
 
 // runPassthroughTest runs a simple test to verify passthrough works

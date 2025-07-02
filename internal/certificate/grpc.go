@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
 	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	nodev1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
+	"log/slog"
 )
 
 // GRPCServer handles incoming gRPC requests for certificate submission.
@@ -27,7 +26,7 @@ func NewGRPCServer(service *Service) *GRPCServer {
 
 // SubmitCertificate handles the submission of a new certificate.
 func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCertificateRequest) (*nodev1.SubmitCertificateResponse, error) {
-	log.Println("Received certificate submission request")
+	slog.Info("received certificate submission request")
 
 	// Marshal the request to store it as a blob
 	rawProto, err := proto.Marshal(req.Certificate)
@@ -38,32 +37,32 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 	metadata := extractMetadata(req.Certificate)
 	metadataJson, err := json.Marshal(metadata)
 	if err != nil {
-		log.Printf("failed to marshal metadata: %v", err)
+		slog.Error("failed to marshal metadata", "err", err)
 	}
 
 	// Check if this chain should be delayed
 	networkID := req.Certificate.GetNetworkId()
 	isDelayed, err := s.service.IsChainDelayed(networkID)
 	if err != nil {
-		log.Printf("error checking if chain %d is delayed: %v", networkID, err)
+		slog.Error("error checking if chain is delayed", "chain", networkID, "err", err)
 		// Default to delaying on error
 		isDelayed = true
 	}
 
 	if isDelayed {
-		log.Printf("Network %d is on the delay list. Storing certificate for delayed processing.", networkID)
+		slog.Info("network is on the delay list. Storing certificate for delayed processing.", "network", networkID)
 		if err := s.service.StoreCertificate(rawProto, string(metadataJson)); err != nil {
 			return nil, fmt.Errorf("failed to store certificate: %w", err)
 		}
 	} else {
-		log.Printf("Network %d is not on the delay list. Sending certificate straight through.", networkID)
+		slog.Info("network is not on the delay list. Sending certificate straight through.", "network", networkID)
 		// Send immediately
 		cert := Certificate{ID: 0, RawProto: rawProto, Metadata: string(metadataJson)}
 		if err := s.service.SendToAggSender(cert); err != nil {
-			log.Printf("ERROR: Failed to send certificate immediately: %v", err)
+			slog.Error("failed to send certificate immediately", "err", err)
 			return nil, fmt.Errorf("failed to send certificate immediately: %w", err)
 		}
-		log.Printf("Successfully sent certificate for network %d immediately", networkID)
+		slog.Info("successfully sent certificate for network immediately", "network", networkID)
 	}
 
 	return &nodev1.SubmitCertificateResponse{

@@ -3,17 +3,18 @@ package certificate
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
 	"time"
+	"log/slog"
 
 	_ "github.com/mattn/go-sqlite3"
+	"errors"
 )
 
-type sqliteStore struct {
+type SqliteStore struct {
 	db *sql.DB
 }
 
-func NewSqliteStore(dbPath string) (Db, error) {
+func NewSqliteStore(dbPath string) (*SqliteStore, error) {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -23,7 +24,7 @@ func NewSqliteStore(dbPath string) (Db, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	store := &sqliteStore{db: db}
+	store := &SqliteStore{db: db}
 	if err := store.Init(); err != nil {
 		return nil, fmt.Errorf("failed to initialize database schema: %w", err)
 	}
@@ -31,7 +32,7 @@ func NewSqliteStore(dbPath string) (Db, error) {
 	return store, nil
 }
 
-func (s *sqliteStore) Init() error {
+func (s *SqliteStore) Init() error {
 	// Certificates table
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS certificates (
@@ -105,20 +106,6 @@ func (s *sqliteStore) Init() error {
 		}
 	}
 
-	// Check if we need to migrate from delay_hours to delay_seconds
-	var delayHours string
-	err = s.db.QueryRow("SELECT value FROM configuration WHERE key = 'delay_hours'").Scan(&delayHours)
-	if err == nil && delayHours != "" {
-		// Migrate to delay_seconds
-		hours, _ := strconv.Atoi(delayHours)
-		seconds := hours * 3600
-		_, err = s.db.Exec("INSERT OR REPLACE INTO configuration (key, value) VALUES ('delay_seconds', ?)", strconv.Itoa(seconds))
-		if err == nil {
-			// Remove old delay_hours
-			s.db.Exec("DELETE FROM configuration WHERE key = 'delay_hours'")
-		}
-	}
-
 	// Set default delay if not present
 	var count2 int
 	err = s.db.QueryRow("SELECT COUNT(*) FROM configuration WHERE key = 'delay_seconds'").Scan(&count2)
@@ -151,12 +138,12 @@ func (s *sqliteStore) Init() error {
 	return nil
 }
 
-func (s *sqliteStore) Close() {
-	s.db.Close()
+func (s *SqliteStore) Close() error {
+	return s.db.Close()
 }
 
 // StoreCertificate stores a new certificate
-func (s *sqliteStore) StoreCertificate(rawProto []byte, metadata string) error {
+func (s *SqliteStore) StoreCertificate(rawProto []byte, metadata string) error {
 	_, err := s.db.Exec(
 		"INSERT INTO certificates (raw_proto, received_at, metadata) VALUES (?, ?, ?)",
 		rawProto, time.Now(), metadata,
@@ -168,17 +155,11 @@ func (s *sqliteStore) StoreCertificate(rawProto []byte, metadata string) error {
 }
 
 // GetProcessableCertificates retrieves certificates that are older than the configured delay and not yet processed.
-func (s *sqliteStore) GetProcessableCertificates() ([]Certificate, error) {
+func (s *SqliteStore) GetProcessableCertificates() ([]Certificate, error) {
 	var delaySeconds int
 	err := s.db.QueryRow("SELECT value FROM configuration WHERE key = 'delay_seconds'").Scan(&delaySeconds)
 	if err != nil {
-		// Check old delay_hours for backward compatibility
-		var delayHours int
-		err = s.db.QueryRow("SELECT value FROM configuration WHERE key = 'delay_hours'").Scan(&delayHours)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get delay configuration: %w", err)
-		}
-		delaySeconds = delayHours * 3600
+		return nil, fmt.Errorf("failed to get delay configuration: %w", err)
 	}
 
 	delay := time.Duration(delaySeconds) * time.Second
@@ -188,7 +169,11 @@ func (s *sqliteStore) GetProcessableCertificates() ([]Certificate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query for processable certificates: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			slog.Error("failed to close certificates query: %v\n", closeErr)
+		}
+	}()
 
 	var certs []Certificate
 	for rows.Next() {
@@ -203,7 +188,7 @@ func (s *sqliteStore) GetProcessableCertificates() ([]Certificate, error) {
 }
 
 // MarkCertificateProcessed marks a certificate as processed.
-func (s *sqliteStore) MarkCertificateProcessed(id int64) error {
+func (s *SqliteStore) MarkCertificateProcessed(id int64) error {
 	_, err := s.db.Exec("UPDATE certificates SET processed_at = ? WHERE id = ?", time.Now(), id)
 	if err != nil {
 		return fmt.Errorf("failed to mark certificate as processed: %w", err)
@@ -212,12 +197,16 @@ func (s *sqliteStore) MarkCertificateProcessed(id int64) error {
 }
 
 // GetCertificates retrieves all certificates.
-func (s *sqliteStore) GetCertificates() ([]Certificate, error) {
+func (s *SqliteStore) GetCertificates() ([]Certificate, error) {
 	rows, err := s.db.Query("SELECT id, raw_proto, received_at, processed_at, metadata FROM certificates ORDER BY received_at DESC")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query for certificates: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			slog.Error("failed to close certificates query: %v\n", closeErr)
+		}
+	}()
 
 	var certs []Certificate
 	for rows.Next() {
@@ -232,11 +221,11 @@ func (s *sqliteStore) GetCertificates() ([]Certificate, error) {
 }
 
 // GetConfigValue retrieves a configuration value.
-func (s *sqliteStore) GetConfigValue(key string) (string, error) {
+func (s *SqliteStore) GetConfigValue(key string) (string, error) {
 	var value string
 	err := s.db.QueryRow("SELECT value FROM configuration WHERE key = ?", key).Scan(&value)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to get config value for key %s: %w", key, err)
@@ -245,7 +234,7 @@ func (s *sqliteStore) GetConfigValue(key string) (string, error) {
 }
 
 // SetConfigValue sets a configuration value.
-func (s *sqliteStore) SetConfigValue(key, value string) error {
+func (s *SqliteStore) SetConfigValue(key, value string) error {
 	_, err := s.db.Exec("INSERT OR REPLACE INTO configuration (key, value) VALUES (?, ?)", key, value)
 	if err != nil {
 		return fmt.Errorf("failed to set config value for key %s: %w", key, err)
@@ -254,11 +243,11 @@ func (s *sqliteStore) SetConfigValue(key, value string) error {
 }
 
 // GetCredential retrieves a credential value.
-func (s *sqliteStore) GetCredential(key string) (string, error) {
+func (s *SqliteStore) GetCredential(key string) (string, error) {
 	var value string
 	err := s.db.QueryRow("SELECT value FROM credentials WHERE key = ?", key).Scan(&value)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to get credential for key %s: %w", key, err)
@@ -267,7 +256,7 @@ func (s *sqliteStore) GetCredential(key string) (string, error) {
 }
 
 // SetCredential sets a credential value.
-func (s *sqliteStore) SetCredential(key, value string) error {
+func (s *SqliteStore) SetCredential(key, value string) error {
 	_, err := s.db.Exec("INSERT OR REPLACE INTO credentials (key, value) VALUES (?, ?)", key, value)
 	if err != nil {
 		return fmt.Errorf("failed to set credential for key %s: %w", key, err)
@@ -276,11 +265,11 @@ func (s *sqliteStore) SetCredential(key, value string) error {
 }
 
 // GetSchedulerStatus retrieves the scheduler status.
-func (s *sqliteStore) GetSchedulerStatus() (bool, error) {
+func (s *SqliteStore) GetSchedulerStatus() (bool, error) {
 	var isActive bool
 	err := s.db.QueryRow("SELECT is_active FROM scheduler_status WHERE id = 1").Scan(&isActive)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			// If no status exists, default to active
 			return true, nil
 		}
@@ -290,7 +279,7 @@ func (s *sqliteStore) GetSchedulerStatus() (bool, error) {
 }
 
 // SetSchedulerStatus sets the scheduler status.
-func (s *sqliteStore) SetSchedulerStatus(isActive bool) error {
+func (s *SqliteStore) SetSchedulerStatus(isActive bool) error {
 	_, err := s.db.Exec("UPDATE scheduler_status SET is_active = ?, last_updated = ? WHERE id = 1", isActive, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to set scheduler status: %w", err)
@@ -299,7 +288,7 @@ func (s *sqliteStore) SetSchedulerStatus(isActive bool) error {
 }
 
 // RecordKillSwitchAttempt records a kill switch attempt.
-func (s *sqliteStore) RecordKillSwitchAttempt(attemptType string) error {
+func (s *SqliteStore) RecordKillSwitchAttempt(attemptType string) error {
 	_, err := s.db.Exec("INSERT INTO kill_switch_attempts (attempt_type, attempted_at) VALUES (?, ?)", attemptType, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to record kill switch attempt: %w", err)
@@ -308,7 +297,7 @@ func (s *sqliteStore) RecordKillSwitchAttempt(attemptType string) error {
 }
 
 // GetRecentKillSwitchAttempts retrieves recent kill switch attempts within the specified duration.
-func (s *sqliteStore) GetRecentKillSwitchAttempts(attemptType string, duration time.Duration) (int, error) {
+func (s *SqliteStore) GetRecentKillSwitchAttempts(attemptType string, duration time.Duration) (int, error) {
 	cutoff := time.Now().Add(-duration)
 	var count int
 	err := s.db.QueryRow(
@@ -322,7 +311,7 @@ func (s *sqliteStore) GetRecentKillSwitchAttempts(attemptType string, duration t
 }
 
 // CleanupOldKillSwitchAttempts removes old kill switch attempts.
-func (s *sqliteStore) CleanupOldKillSwitchAttempts(olderThan time.Duration) error {
+func (s *SqliteStore) CleanupOldKillSwitchAttempts(olderThan time.Duration) error {
 	cutoff := time.Now().Add(-olderThan)
 	_, err := s.db.Exec("DELETE FROM kill_switch_attempts WHERE attempted_at < ?", cutoff)
 	if err != nil {
