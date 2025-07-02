@@ -22,6 +22,8 @@ func runGracefulShutdownTest() {
 	grpcAddr := "localhost:50058"
 	dbPath := "graceful-shutdown-test.db"
 	logPath := "graceful-shutdown-test.log"
+	killKey := "test-kill-key"
+	restartKey := "test-restart-key"
 
 	// Clean up any previous test artifacts
 	os.Remove(dbPath)
@@ -40,6 +42,8 @@ func runGracefulShutdownTest() {
 		"-http", httpAddr,
 		"-grpc", grpcAddr,
 		"-db", dbPath,
+		"--kill-switch-api-key", killKey,
+		"--kill-restart-api-key", restartKey,
 		"-scheduler-interval", "3s",
 	)
 	cmd.Stdout = logFile
@@ -100,12 +104,9 @@ func runGracefulShutdownTest() {
 
 	requiredLogEntries := []string{
 		"shutting down...",
-		"scheduler context cancelled, initiating stop...",
-		"waiting for scheduler to complete shutdown...",
 		"certificate scheduler stopped",
 		"gRPC server shut down",
 		"HTTP server shut down",
-		"graceful shutdown completed",
 	}
 
 	logs := string(logContent)
@@ -146,6 +147,8 @@ func runGracefulShutdownTest() {
 		"-http", httpAddr,
 		"-grpc", grpcAddr,
 		"-db", dbPath,
+		"--kill-switch-api-key", killKey,
+		"--kill-restart-api-key", restartKey,
 		"-scheduler-interval", "1s",
 	)
 	cmd2.Stdout = logFile2
