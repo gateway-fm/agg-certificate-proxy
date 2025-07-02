@@ -37,6 +37,7 @@ func NewScheduler(service *Service, interval time.Duration) (*Scheduler, error) 
 	_, err = s.NewJob(
 		gocron.DurationJob(interval),
 		gocron.NewTask(scheduler.processCertificates),
+		gocron.WithSingletonMode(gocron.LimitModeReschedule),
 	)
 	if err != nil {
 		cancel()
