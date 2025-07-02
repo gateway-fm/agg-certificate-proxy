@@ -15,17 +15,17 @@ help: ## Show this help message
 .PHONY: build-proxy
 build-proxy: ## Build the proxy binary
 	@echo "Building proxy..."
-	@cd .. && go build -o proxy cmd/proxy/main.go
+	@cd .. && go build -o tests/proxy cmd/proxy/main.go
 
 .PHONY: kill-switch
 kill-switch: build-proxy ## Run kill switch test
 	@echo "Running kill switch test..."
-	@cd .. && go run tests/*.go -kill-switch
+	@go run . -kill-switch
 
 .PHONY: passthrough
 passthrough: build-proxy ## Run passthrough test
 	@echo "Running passthrough test..."
-	@cd .. && go run tests/*.go -passthrough
+	@go run . -passthrough
 
 .PHONY: all
 all: kill-switch passthrough ## Run all tests
@@ -33,7 +33,7 @@ all: kill-switch passthrough ## Run all tests
 .PHONY: clean
 clean: ## Clean up test artifacts
 	@echo "Cleaning up..."
-	@cd .. && rm -f kill-switch-test.db kill-switch-test.log mock-receiver.log mock_receiver
-	@cd .. && rm -f passthrough-test.db passthrough-test.log passthrough-receiver.log simple_receiver
-	@cd .. && rm -f proxy
+	@rm -f kill-switch-test.db kill-switch-test.log mock-receiver.log
+	@rm -f passthrough-test.db passthrough-test.log passthrough-receiver.log
+	@rm -f proxy receiver/receiver
 	@echo "Clean complete" 

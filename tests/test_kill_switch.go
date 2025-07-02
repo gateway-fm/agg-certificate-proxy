@@ -56,7 +56,6 @@ func runKillSwitchTest() {
 		os.Remove(dbFile)
 		os.Remove(logFile)
 		os.Remove("mock-receiver.log")
-		os.Remove("mock_receiver")
 	}
 	defer cleanup()
 
@@ -346,92 +345,21 @@ func runKillSwitchTest() {
 
 // startMockReceiver starts a mock aggsender for testing
 func startMockReceiver(port string) (*exec.Cmd, error) {
-	// Create a simple receiver that logs to file
-	receiverCode := `
-package main
-
-import (
-	"context"
-	"fmt"
-	"log/slog"
-	"log"
-	"net"
-	"os"
-	"time"
-	
-	"google.golang.org/grpc"
-	
-	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
-	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
-	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
-)
-
-type mockServer struct {
-	v1.UnimplementedCertificateSubmissionServiceServer
-	logFile *os.File
-}
-
-func (s *mockServer) SubmitCertificate(ctx context.Context, req *v1.SubmitCertificateRequest) (*v1.SubmitCertificateResponse, error) {
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	networkID := uint32(0)
-	if req.Certificate != nil {
-		networkID = req.Certificate.NetworkId
+	// Build the receiver if it doesn't exist
+	receiverBinary := "./receiver/receiver"
+	if _, err := os.Stat(receiverBinary); os.IsNotExist(err) {
+		buildCmd := exec.Command("go", "build", "-o", receiverBinary, "./receiver/main.go")
+		buildOut, err := buildCmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build mock receiver: %v\nOutput: %s", err, string(buildOut))
+		}
 	}
-	
-	logMsg := fmt.Sprintf("[%%s] RECEIVED CERTIFICATE for network %%d\n", timestamp, networkID)
-	s.logFile.WriteString(logMsg)
-	s.logFile.Sync()
-	slog.Info(logMsg)
-	
-	// Return a mock response
-	return &v1.SubmitCertificateResponse{
-		CertificateId: &typesv1.CertificateId{
-			Value: &interopv1.FixedBytes32{Value: []byte{1, 2, 3, 4}},
-		},
-	}, nil
-}
 
-func main() {
-	// Clear the log file at startup
-	os.WriteFile("mock-receiver.log", []byte{}, 0644)
-	
-	logFile, err := os.OpenFile("mock-receiver.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatal("Failed to open log file: ", err)
-	}
-	defer logFile.Close()
-	
-	lis, err := net.Listen("tcp", "127.0.0.1:%s")
-	if err != nil {
-		log.Fatal("Failed to listen: ", err)
-	}
-	
-	s := grpc.NewServer()
-	v1.RegisterCertificateSubmissionServiceServer(s, &mockServer{logFile: logFile})
-	
-	slog.Info("mock receiver started")
-	if err := s.Serve(lis); err != nil {
-		log.Fatal("Failed to serve: ", err)
-	}
-}
-`
-	// Write receiver code to temp file
-	tmpFile := "mock_receiver_temp.go"
-	receiverCode = fmt.Sprintf(receiverCode, port)
-	os.WriteFile(tmpFile, []byte(receiverCode), 0644)
-
-	// Build and run
-	buildCmd := exec.Command("go", "build", "-o", "mock_receiver", tmpFile)
-	buildOut, err := buildCmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("failed to build mock receiver: %v\nOutput: %s", err, string(buildOut))
-	}
-	os.Remove(tmpFile)
-
-	cmd := exec.Command("./mock_receiver")
-	// Capture both stdout and stderr
+	// Run the receiver with specified port
+	cmd := exec.Command(receiverBinary, "-port", port, "-log", "mock-receiver.log")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start mock receiver: %v", err)
 	}
@@ -441,12 +369,6 @@ func main() {
 	if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
 		return nil, fmt.Errorf("mock receiver process died immediately after starting - likely port already in use")
 	}
-
-	// Clean up binary on exit
-	go func() {
-		time.Sleep(60 * time.Second)
-		os.Remove("mock_receiver")
-	}()
 
 	return cmd, nil
 }
