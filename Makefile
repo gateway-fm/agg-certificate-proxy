@@ -1,6 +1,6 @@
 # Directory containing proto files (from submodule)
 PROTO_DIR_INTEROP=interop/proto
-PROTO_DIR_NODE=../agglayer/proto
+PROTO_DIR_NODE=agglayer/proto
 # Find all proto files in the interop proto directory
 PROTO_FILES=\
 	$(PROTO_DIR_INTEROP)/agglayer/interop/types/v1/aggchain.proto \
