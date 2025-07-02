@@ -1,27 +1,34 @@
 package health
 
-import "sync"
+import "context"
 
 type Service struct {
-	shuttingDown      bool
-	shuttingDownMutex sync.RWMutex
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func NewService() *Service {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{
-		shuttingDownMutex: sync.RWMutex{},
-		shuttingDown:      false,
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 func (s *Service) Shutdown() {
-	s.shuttingDownMutex.Lock()
-	s.shuttingDown = true
-	s.shuttingDownMutex.Unlock()
+	s.cancel()
 }
 
 func (s *Service) IsShuttingDown() bool {
-	s.shuttingDownMutex.RLock()
-	defer s.shuttingDownMutex.RUnlock()
-	return s.shuttingDown
+	select {
+	case <-s.ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// Context returns the service context for use in operations
+func (s *Service) Context() context.Context {
+	return s.ctx
 }

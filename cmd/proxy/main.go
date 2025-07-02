@@ -138,7 +138,6 @@ func main() {
 		log.Fatalf("Failed to create scheduler: %v", err)
 	}
 	go scheduler.Start()
-	defer scheduler.Stop()
 
 	// Create and register gRPC server
 	grpcServer := grpc.NewServer()
@@ -182,38 +181,48 @@ func main() {
 	slog.Info("shutting down...")
 
 	// Signal health service that we're shutting down
+	// This makes /health return 503 for new requests
 	healthService.Shutdown()
 
-	// Give health checks time to detect shutdown status
-	time.Sleep(200 * time.Millisecond)
+	// Give a tiny window for health checks to see the 503
+	time.Sleep(100 * time.Millisecond)
 
-	// Graceful shutdown of gRPC server first
-	grpcStopCh := make(chan struct{})
+	// Create a shutdown context with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// Create a channel to coordinate shutdown steps
+	shutdownComplete := make(chan struct{})
+
 	go func() {
+		// Step 1: Stop the scheduler and wait for running tasks
+		slog.Info("stopping scheduler and waiting for running tasks...")
+		scheduler.Stop()
+
+		// Step 2: Graceful shutdown of gRPC server
+		slog.Info("shutting down gRPC server...")
 		grpcServer.GracefulStop()
-		close(grpcStopCh)
+		slog.Info("gRPC server shut down")
+
+		// Step 3: Graceful shutdown of HTTP server
+		// This will wait for all active HTTP requests to complete
+		slog.Info("shutting down HTTP server...")
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			slog.Error("HTTP server shutdown error", "err", err)
+		}
+		slog.Info("HTTP server shut down")
+
+		close(shutdownComplete)
 	}()
 
-	// Wait for gRPC to shut down
+	// Wait for shutdown to complete or timeout
 	select {
-	case <-grpcStopCh:
-		slog.Info("gRPC server shut down gracefully")
-	case <-time.After(10 * time.Second):
-		slog.Warn("gRPC graceful shutdown timed out, forcing stop")
-		grpcServer.Stop()
+	case <-shutdownComplete:
+		slog.Info("graceful shutdown completed")
+	case <-shutdownCtx.Done():
+		slog.Warn("shutdown timeout exceeded, forcing shutdown")
+		grpcServer.Stop() // Force stop gRPC if still running
 	}
-
-	// Now shut down HTTP server after a brief delay
-	// This allows any final health checks to complete
-	time.Sleep(500 * time.Millisecond)
-
-	httpShutdownCtx, httpCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer httpCancel()
-
-	if err := httpServer.Shutdown(httpShutdownCtx); err != nil {
-		slog.Error("HTTP server shutdown error", "err", err)
-	}
-	slog.Info("HTTP server shut down")
 
 	slog.Info("shutdown complete")
 }
