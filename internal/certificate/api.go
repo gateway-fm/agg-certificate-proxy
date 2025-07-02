@@ -11,6 +11,7 @@ import (
 	"time"
 	"log/slog"
 	"log"
+	"golang.org/x/crypto/bcrypt"
 )
 
 //go:embed templates
@@ -358,8 +359,10 @@ func (s *APIServer) handleKillSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if storedKey == "" || apiKey != storedKey {
-		http.Error(w, "invalid API key", http.StatusUnauthorized)
+	err = bcrypt.CompareHashAndPassword([]byte(storedKey), []byte(apiKey))
+	if err != nil {
+		slog.Error("generating hashed kill switch API key", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -437,8 +440,10 @@ func (s *APIServer) handleRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if storedKey == "" || apiKey != storedKey {
-		http.Error(w, "invalid API key", http.StatusUnauthorized)
+	err = bcrypt.CompareHashAndPassword([]byte(storedKey), []byte(apiKey))
+	if err != nil {
+		slog.Error("error generating hashed restart API key", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 

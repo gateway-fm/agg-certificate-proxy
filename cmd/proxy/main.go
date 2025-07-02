@@ -16,6 +16,8 @@ import (
 	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
 	"log/slog"
 	"log"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func main() {
@@ -56,21 +58,19 @@ func main() {
 		slog.Error("no kill switch API key provided - cannot start")
 		return
 	}
-	if err := db.SetCredential("kill_switch_api_key", *killSwitchAPIKey); err != nil {
-		slog.Error("failed to set kill switch API key", "err", err)
+	if err = hashAndStoreKey(db, "kill_switch_api_key", *killSwitchAPIKey); err != nil {
+		slog.Error("failed to hash kill switch API key", "err", err)
 		return
 	}
-	slog.Info("kill switch API key configured")
 
 	if killRestartAPIKey == nil || len(*killRestartAPIKey) == 0 {
 		slog.Error("no kill restart API key provided - cannot start")
 		return
 	}
-	if err := db.SetCredential("kill_restart_api_key", *killRestartAPIKey); err != nil {
-		slog.Error("failed to set kill restart API key", "err", err)
+	if err = hashAndStoreKey(db, "kill_restart_api_key", *killRestartAPIKey); err != nil {
+		slog.Error("failed to hash kill restart API key", "err", err)
 		return
 	}
-	slog.Info("kill restart API key configured")
 
 	// Update aggsender address if provided
 	if *aggsenderAddr != "" {
@@ -204,4 +204,15 @@ func startGRPCServer(server *grpc.Server, addr string) error {
 	}
 	slog.Info("gRPC proxy listening", "address", addr)
 	return server.Serve(lis)
+}
+
+func hashAndStoreKey(db certificate.Db, dbKey string, key string) error {
+	hashedKey, err := bcrypt.GenerateFromPassword([]byte(key), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if err := db.SetCredential(dbKey, string(hashedKey)); err != nil {
+		return err
+	}
+	return nil
 }
