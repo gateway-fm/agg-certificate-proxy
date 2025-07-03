@@ -15,12 +15,13 @@ import (
 	"syscall"
 	"time"
 
+	"errors"
+	"sync"
+
 	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
 	proxyhealth "github.com/gateway-fm/agg-certificate-proxy/internal/health"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
-	"errors"
-	"sync"
 )
 
 func main() {
@@ -34,6 +35,7 @@ func main() {
 	schedulerInterval := flag.String("scheduler-interval", "30s", "How often to check for pending certificates (e.g., 30s, 1m)")
 	killSwitchAPIKey := flag.String("kill-switch-api-key", "", "API key for kill switch endpoint")
 	killRestartAPIKey := flag.String("kill-restart-api-key", "", "API key for restart endpoint")
+	dataKey := flag.String("data-key", "", "API key for certificate endpoints")
 	flag.Parse()
 
 	// Create root context with cancellation
@@ -76,6 +78,15 @@ func main() {
 	}
 	if err = hashAndStoreKey(db, "kill_restart_api_key", *killRestartAPIKey); err != nil {
 		slog.Error("failed to hash kill restart API key", "err", err)
+		return
+	}
+
+	if dataKey == nil || len(*dataKey) == 0 {
+		slog.Error("no data key provided - cannot start")
+		return
+	}
+	if err = hashAndStoreKey(db, "data_key", *dataKey); err != nil {
+		slog.Error("failed to hash data key", "err", err)
 		return
 	}
 
