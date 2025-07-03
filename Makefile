@@ -64,7 +64,7 @@ help: ## Show this help message
 	@echo '  proto-tools         Install required protobuf tools'
 	@echo '  clean               Remove build artifacts and database'
 	@echo '  test                Run unit tests'
-	@echo '  test-integration    Run integration tests (kill switch, passthrough)'
+	@echo '  test-integration    Run integration tests (kill switch, passthrough, metrics)'
 	@echo '  update-submodules   Update git submodules'
 	@echo ''
 	@echo 'Configuration:'

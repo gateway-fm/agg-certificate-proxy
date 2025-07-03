@@ -11,6 +11,7 @@ func main() {
 	passthroughTest := flag.Bool("passthrough", false, "Run passthrough test")
 	gracefulShutdownTest := flag.Bool("graceful-shutdown", false, "Run graceful shutdown test")
 	sendTest := flag.Bool("send", false, "Send random certificate to local instance")
+	metricsTest := flag.Bool("metrics", false, "Run metrics test")
 	flag.Parse()
 
 	if len(os.Args) == 1 {
@@ -22,6 +23,7 @@ func main() {
 		fmt.Println("  go run tests/*.go -passthrough        Run passthrough test")
 		fmt.Println("  go run tests/*.go -graceful-shutdown  Run graceful shutdown test")
 		fmt.Println("  go run tests/*.go -send           Send random certificate to local instance")
+		fmt.Println("  go run tests/*.go -metrics         Run metrics test")
 		return
 	}
 
@@ -42,6 +44,11 @@ func main() {
 
 	if *sendTest {
 		sendRandomCertificate()
+		return
+	}
+
+	if *metricsTest {
+		runMetricsIntegrationTest()
 		return
 	}
 }

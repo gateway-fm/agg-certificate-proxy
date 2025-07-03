@@ -13,8 +13,8 @@ import (
 // Prometheus metrics
 var (
 	// Certificate metrics
-	certificateTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
+	certificateTotal = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Name: "certificate_total_count",
 			Help: "Total number of certificates open in the queue",
 		},
@@ -60,7 +60,7 @@ func NewPrometheusReporter(networks []uint32) *PrometheusReporter {
 // ReportTotals updates Prometheus metrics with the provided totals
 func (r *PrometheusReporter) ReportTotals(totals Totals) {
 	// Update certificate count
-	certificateTotal.WithLabelValues().Add(float64(totals.CertCount))
+	certificateTotal.WithLabelValues().Set(float64(totals.CertCount))
 
 	grandTotal := big.NewInt(0)
 

@@ -10,6 +10,7 @@ help: ## Show this help message
 	@echo '  kill-switch        Run kill switch test'
 	@echo '  passthrough        Run passthrough test'
 	@echo '  graceful-shutdown  Run graceful shutdown test'
+	@echo '  metrics            Run metrics test'
 	@echo '  all                Run all tests'
 	@echo '  clean              Clean up test artifacts'
 
@@ -33,8 +34,13 @@ graceful-shutdown: build-proxy ## Run graceful shutdown test
 	@echo "Running graceful shutdown test..."
 	@go run . -graceful-shutdown
 
+.PHONY: metrics
+metrics: build-proxy ## Run metrics test
+	@echo "Running metrics test..."
+	@go run . -metrics
+
 .PHONY: all
-all: kill-switch passthrough graceful-shutdown ## Run all tests
+all: kill-switch passthrough graceful-shutdown metrics ## Run all tests
 
 .PHONY: clean
 clean: ## Clean up test artifacts
