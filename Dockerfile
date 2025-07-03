@@ -21,8 +21,8 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN go build \
-    -ldflags="-w -s" \
+RUN CGO_ENABLED=0 go build \
+    -ldflags="-w -s -extldflags=-static" \
     -o /app/proxy \
     ./cmd/proxy
 
