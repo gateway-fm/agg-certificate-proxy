@@ -27,6 +27,7 @@ DELAYED_CHAINS ?= 1,137
 DELAY ?= 48h
 AGGSENDER_ADDR ?= localhost:50052
 KILL_KEY ?= demo-key
+DATA_KEY ?= demo-key
 
 # Mappings for each proto file to the Go package path
 PROTO_MAPPINGS=\
@@ -136,7 +137,7 @@ run: build ## Run the proxy with default settings
 	@echo "Delayed chains: $(DELAYED_CHAINS)"
 	@echo "Delay: $(DELAY)"
 	@echo "Aggsender address: $(AGGSENDER_ADDR)"
-	./proxy -db=$(DB_PATH) -http=:$(HTTP_PORT) -grpc=:$(GRPC_PORT) -delayed-chains="$(DELAYED_CHAINS)" -delay=$(DELAY) -aggsender-addr=$(AGGSENDER_ADDR) -kill-switch-api-key=$(KILL_KEY) -kill-restart-api-key=$(KILL_KEY)
+	./proxy -db=$(DB_PATH) -http=:$(HTTP_PORT) -grpc=:$(GRPC_PORT) -delayed-chains="$(DELAYED_CHAINS)" -delay=$(DELAY) -aggsender-addr=$(AGGSENDER_ADDR) -kill-switch-api-key=$(KILL_KEY) -kill-restart-api-key=$(KILL_KEY) -data-key=$(DATA_KEY)
 
 .PHONY: run-custom
 run-custom: build ## Run the proxy with custom delayed chains (use DELAYED_CHAINS=x,y,z)
@@ -144,13 +145,13 @@ run-custom: build ## Run the proxy with custom delayed chains (use DELAYED_CHAIN
 	@echo "Delayed chains: $(DELAYED_CHAINS)"
 	@echo "Delay: $(DELAY)"
 	@echo "Aggsender address: $(AGGSENDER_ADDR)"
-	./proxy -db=$(DB_PATH) -http=:$(HTTP_PORT) -grpc=:$(GRPC_PORT) -delayed-chains="$(DELAYED_CHAINS)" -delay=$(DELAY) -aggsender-addr=$(AGGSENDER_ADDR) -kill-switch-api-key=$(KILL_KEY) -kill-restart-api-key=$(KILL_KEY)
+	./proxy -db=$(DB_PATH) -http=:$(HTTP_PORT) -grpc=:$(GRPC_PORT) -delayed-chains="$(DELAYED_CHAINS)" -delay=$(DELAY) -aggsender-addr=$(AGGSENDER_ADDR) -kill-switch-api-key=$(KILL_KEY) -kill-restart-api-key=$(KILL_KEY) -data-key=$(DATA_KEY)
 
 .PHONY: run-no-delay
 run-no-delay: build ## Run the proxy with no delayed chains (all pass through)
 	@echo "Starting proxy with no delayed chains (all pass through)..."
 	@echo "Aggsender address: $(AGGSENDER_ADDR)"
-	./proxy -db=$(DB_PATH) -http=:$(HTTP_PORT) -grpc=:$(GRPC_PORT) -delayed-chains="" -delay=$(DELAY) -aggsender-addr=$(AGGSENDER_ADDR) -kill-switch-api-key=$(KILL_KEY) -kill-restart-api-key=$(KILL_KEY)
+	./proxy -db=$(DB_PATH) -http=:$(HTTP_PORT) -grpc=:$(GRPC_PORT) -delayed-chains="" -delay=$(DELAY) -aggsender-addr=$(AGGSENDER_ADDR) -kill-switch-api-key=$(KILL_KEY) -kill-restart-api-key=$(KILL_KEY) -data-key=$(DATA_KEY)
 
 .PHONY: run-background
 run-background: build ## Run the proxy in the background
@@ -158,7 +159,7 @@ run-background: build ## Run the proxy in the background
 	@echo "Delayed chains: $(DELAYED_CHAINS)"
 	@echo "Delay: $(DELAY)"
 	@echo "Aggsender address: $(AGGSENDER_ADDR)"
-	@./proxy -db=$(DB_PATH) -http=:$(HTTP_PORT) -grpc=:$(GRPC_PORT) -delayed-chains="$(DELAYED_CHAINS)" -delay=$(DELAY) -aggsender-addr=$(AGGSENDER_ADDR) -kill-switch-api-key=$(KILL_KEY) -kill-restart-api-key=$(KILL_KEY) > proxy.log 2>&1 &
+	@./proxy -db=$(DB_PATH) -http=:$(HTTP_PORT) -grpc=:$(GRPC_PORT) -delayed-chains="$(DELAYED_CHAINS)" -delay=$(DELAY) -aggsender-addr=$(AGGSENDER_ADDR) -kill-switch-api-key=$(KILL_KEY) -kill-restart-api-key=$(KILL_KEY) -data-key=$(DATA_KEY) > proxy.log 2>&1 &
 	@echo "Proxy started in background. Check proxy.log for output."
 
 .PHONY: stop

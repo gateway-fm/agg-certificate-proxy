@@ -30,6 +30,7 @@ The proxy accepts the following command-line flags:
 - `-scheduler-interval`: How often to check for pending certificates (default: `30s`)
 - `-kill-switch-api-key`: API key for kill switch endpoint
 - `-kill-restart-api-key`: API key for restart endpoint
+- `-data-key`: API key for web/json access to the certificate data
 
 ## Kill Switch Functionality
 
@@ -51,8 +52,9 @@ The proxy includes a kill switch mechanism that allows stopping the certificate 
 ```bash
 # Start the proxy with API keys
 ./proxy \
-    --kill-switch-api-key="your-secret-kill-key" \
-    --kill-restart-api-key="your-secret-restart-key"
+    -kill-switch-api-key="your-secret-kill-key" \
+    -kill-restart-api-key="your-secret-restart-key" \
+    -data-key="your-secret-key"
 
 # Activate kill switch (requires 3 calls in 1 minute)
 curl -X POST "http://localhost:8080/kill?key=your-secret-kill-key"
