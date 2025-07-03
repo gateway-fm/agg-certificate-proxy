@@ -41,17 +41,19 @@ func runPassthroughTest() {
 	restartKey := "test-restart-key"
 	dataKey := "test-data-key"
 
-	// Start proxy
-	fmt.Println("2. Starting proxy...")
+	// Start proxy with no delayed chains (all pass through)
+	fmt.Println("Step 2: Starting certificate proxy (all passthrough mode)...")
 	proxyCmd := exec.Command("./proxy",
 		"--db", "passthrough-test.db",
-		"--http", ":8080",
-		"--grpc", ":50051",
-		"-kill-switch-api-key", killKey,
-		"-kill-restart-api-key", restartKey,
-		"-data-key", dataKey,
-		"-aggsender-addr", "127.0.0.1:50052",
-		"-delayed-chains", "1,137", // Only delay chains 1 and 137
+		"--http", ":8081",
+		"--grpc", ":50054",
+		"--kill-switch-api-key", killKey,
+		"--kill-restart-api-key", restartKey,
+		"--data-key", dataKey,
+		"--delay", "5s",
+		"--scheduler-interval", "1s",
+		"--aggsender-addr", "127.0.0.1:50052",
+		"--delayed-chains", "", // Empty = no delayed chains
 	)
 
 	logFile, _ := os.Create("passthrough-test.log")
@@ -70,7 +72,7 @@ func runPassthroughTest() {
 
 	// Submit a non-delayed certificate
 	fmt.Println("4. Submitting certificate for chain 10 (should pass through)...")
-	if err := submitTestCertificate("127.0.0.1:50051", 10, 100); err != nil {
+	if err := submitTestCertificate("127.0.0.1:50054", 10, 100); err != nil {
 		fmt.Printf("   ❌ Failed: %v\n", err)
 	}
 

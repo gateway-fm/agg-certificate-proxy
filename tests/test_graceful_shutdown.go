@@ -43,9 +43,9 @@ func runGracefulShutdownTest() {
 		"-http", httpAddr,
 		"-grpc", grpcAddr,
 		"-db", dbPath,
-		"-kill-switch-api-key", killKey,
-		"-kill-restart-api-key", restartKey,
-		"-data-key", dataKey,
+		"--kill-switch-api-key", killKey,
+		"--kill-restart-api-key", restartKey,
+		"--data-key", dataKey,
 		"-scheduler-interval", "3s",
 	)
 	cmd.Stdout = logFile
@@ -149,9 +149,9 @@ func runGracefulShutdownTest() {
 		"-http", httpAddr,
 		"-grpc", grpcAddr,
 		"-db", dbPath,
-		"-kill-switch-api-key", killKey,
-		"-kill-restart-api-key", restartKey,
-		"-data-key", dataKey,
+		"--kill-switch-api-key", killKey,
+		"--kill-restart-api-key", restartKey,
+		"--data-key", dataKey,
 		"-scheduler-interval", "1s",
 	)
 	cmd2.Stdout = logFile2

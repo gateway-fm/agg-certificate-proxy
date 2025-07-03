@@ -31,6 +31,7 @@ The proxy accepts the following command-line flags:
 - `-kill-switch-api-key`: API key for kill switch endpoint
 - `-kill-restart-api-key`: API key for restart endpoint
 - `-data-key`: API key for web/json access to the certificate data
+- `-backend-addr`: Address of the backend agglayer to proxy non-certificate requests to (optional)
 
 ## Kill Switch Functionality
 
