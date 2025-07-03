@@ -4,11 +4,57 @@
 
 set -e
 
-echo "========================================"
-echo "AggLayer Certificate Proxy Demo"
-echo "Transparent Forwarding Configuration"
-echo "========================================"
-echo
+echo "======================================="
+echo "Transparent Proxy Demo"
+echo "======================================="
+echo ""
+echo "This demo shows how the proxy transparently forwards all gRPC requests"
+echo "while intercepting and delaying certificate submissions."
+echo ""
+
+# Check if required dependencies are available
+if ! command -v grpcurl &> /dev/null; then
+    echo "Error: grpcurl is not installed. Install it with:"
+    echo "  brew install grpcurl (macOS)"
+    echo "  go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest"
+    exit 1
+fi
+
+echo "Configuration:"
+echo "- Proxy listening on :50051"
+echo "- Backend AggLayer at agglayer.example.com:50052"
+echo "- Delayed chains: 1, 137"
+echo "- Delay duration: 48h"
+echo ""
+
+echo "Starting proxy with command:"
+echo "go run cmd/proxy/main.go \\"
+echo "  --grpc :50051 \\"
+echo "  --http :8080 \\"
+echo "  --aggsender-addr agglayer.example.com:50052 \\"
+echo "  --delayed-chains 1,137 \\"
+echo "  --delay 48h \\"
+echo "  --scheduler-interval 30s \\"
+echo "  --kill-switch-api-key your-kill-key \\"
+echo "  --kill-restart-api-key your-restart-key \\"
+echo "  --data-key your-data-key"
+echo ""
+
+echo "The proxy will:"
+echo "- Intercept certificate submissions for chains 1,137 and delay them 48h"
+echo "- Forward all other gRPC requests transparently to agglayer.example.com:50052"
+echo "- Forward delayed certificates to the same backend after the delay period"
+echo ""
+
+echo "Example requests:"
+echo ""
+echo "1. Certificate submission (will be intercepted and delayed):"
+echo "   grpcurl -plaintext localhost:50051 agglayer.CertificateSubmissionService/SubmitCertificate"
+echo ""
+echo "2. Other services (will be transparently forwarded):"
+echo "   grpcurl -plaintext localhost:50051 agglayer.NodeStateService/GetCertificateHeader"
+echo "   grpcurl -plaintext localhost:50051 agglayer.ConfigurationService/GetEpochConfiguration"
+echo ""
 
 # Step 1: Generate proto files
 echo "Step 1: Generating proto files..."
@@ -43,8 +89,7 @@ echo
 echo "./proxy \\"
 echo "  --grpc :50051 \\"
 echo "  --http :8080 \\"
-echo "  --backend-addr agglayer.example.com:50052 \\"
-echo "  --aggsender-addr aggsender.example.com:50053 \\"
+echo "  --aggsender-addr agglayer.example.com:50052 \\"
 echo "  --delayed-chains 1,137 \\"
 echo "  --delay 48h \\"
 echo "  --kill-switch-api-key your-key \\"
@@ -54,4 +99,4 @@ echo
 echo "This will:"
 echo "- Intercept certificate submissions on chains 1,137 with 48h delay"
 echo "- Forward all other gRPC requests to agglayer.example.com:50052"
-echo "- Send delayed certificates to aggsender.example.com:50053" 
+echo "- Forward delayed certificates to the same backend after the delay period" 

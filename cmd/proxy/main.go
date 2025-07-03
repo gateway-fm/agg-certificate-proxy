@@ -166,8 +166,33 @@ func main() {
 
 	// Create and register gRPC server
 	grpcServer := grpc.NewServer()
-	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater)
+	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater)\
 	certGrpcServer.Register(grpcServer)
+	
+	// Create transparent proxy if aggsender address is provided
+	var transparentProxy *certificate.TransparentProxy
+	var grpcOpts []grpc.ServerOption
+
+	if *aggsenderAddr != "" {
+		transparentProxy, err = certificate.NewTransparentProxy(*aggsenderAddr)
+		if err != nil {
+			log.Fatalf("Failed to create transparent proxy: %v", err)
+		}
+		defer func() {
+			if closeErr := transparentProxy.Close(); closeErr != nil {
+				slog.Error("failed to close transparent proxy", "err", closeErr)
+			}
+		}()
+
+		// Add interceptors and unknown service handler
+		grpcOpts = append(grpcOpts,
+			grpc.UnaryInterceptor(transparentProxy.TransparentUnaryHandler()),
+			grpc.StreamInterceptor(transparentProxy.TransparentStreamHandler()),
+			grpc.UnknownServiceHandler(transparentProxy.UnknownServiceHandler()),
+		)
+
+		slog.Info("transparent proxy enabled", "backend", *aggsenderAddr)
+	}
 
 	// Start gRPC server in goroutine
 	go func() {

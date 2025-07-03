@@ -5,7 +5,50 @@ A small proxy to provide the following functionality:
 - Allow a kill-switch type functionality to prevent outbound bridging in case of network emergency
 
 # How it works
-![Proxy Overview](proxy-overview.png)
+
+```mermaid
+graph LR
+    subgraph "Client Applications"
+        C1[Certificate Client]
+        C2[Other gRPC Clients]
+    end
+    
+    subgraph "AggLayer Certificate Proxy"
+        direction TB
+        GS[gRPC Server<br/>:50051]
+        IC[Certificate Interceptor]
+        TP[Transparent Proxy Handler]
+        DB[(SQLite DB)]
+        SCH[Scheduler]
+    end
+    
+    subgraph "Backend AggLayer"
+        CS[Certificate Service]
+        NS[NodeState Service]
+        CF[Config Service]
+        OS[Other Services...]
+    end
+    
+    C1 -->|"SubmitCertificate"| GS
+    C2 -->|"GetCertificateHeader<br/>GetEpochConfiguration<br/>etc."| GS
+    
+    GS -->|"Certificate Requests"| IC
+    GS -.->|"Non-Certificate Requests<br/>(UnknownServiceHandler)"| TP
+    
+    IC -->|"Delayed Chains<br/>(1, 137)"| DB
+    IC -->|"Non-Delayed Chains"| CS
+    
+    DB -->|"After Delay"| SCH
+    SCH -->|"Forward"| CS
+    
+    TP -.->|"Direct Forward"| NS
+    TP -.->|"Direct Forward"| CF
+    TP -.->|"Direct Forward"| OS
+    
+    style IC fill:#f9f,stroke:#333,stroke-width:2px
+    style TP fill:#9f9,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+    style DB fill:#bbf,stroke:#333,stroke-width:2px
+```
 
 ## Quick Start
 
@@ -26,12 +69,11 @@ The proxy accepts the following command-line flags:
 - `-db`: SQLite database path (default: `certificates.db`)
 - `-delayed-chains`: Comma-separated list of chain IDs to delay (default: `1,137`)
 - `-delay`: Delay duration for certificate processing (e.g., `48h`, `30m`, `2h15m`) (default: `48h`)
-- `-aggsender-addr`: Address of the aggsender to forward certificates to
+- `-aggsender-addr`: Address of the backend agglayer to forward all requests to (optional)
 - `-scheduler-interval`: How often to check for pending certificates (default: `30s`)
-- `-kill-switch-api-key`: API key for kill switch endpoint
-- `-kill-restart-api-key`: API key for restart endpoint
-- `-data-key`: API key for web/json access to the certificate data
-- `-backend-addr`: Address of the backend agglayer to proxy non-certificate requests to (optional)
+- `-kill-switch-api-key`: API key for kill switch endpoint (required)
+- `-kill-restart-api-key`: API key for restart endpoint (required)
+- `-data-key`: API key for certificate endpoints (required)
 
 ## Kill Switch Functionality
 
