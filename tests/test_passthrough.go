@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 	"time"
-	"log"
 )
 
 // runPassthroughTest runs a simple test to verify passthrough works
@@ -39,6 +39,7 @@ func runPassthroughTest() {
 
 	killKey := "test-kill-key"
 	restartKey := "test-restart-key"
+	dataKey := "test-data-key"
 
 	// Start proxy
 	fmt.Println("2. Starting proxy...")
@@ -46,10 +47,11 @@ func runPassthroughTest() {
 		"--db", "passthrough-test.db",
 		"--http", ":8080",
 		"--grpc", ":50051",
-		"--kill-switch-api-key", killKey,
-		"--kill-restart-api-key", restartKey,
-		"--aggsender-addr", "127.0.0.1:50052",
-		"--delayed-chains", "1,137", // Only delay chains 1 and 137
+		"-kill-switch-api-key", killKey,
+		"-kill-restart-api-key", restartKey,
+		"-data-key", dataKey,
+		"-aggsender-addr", "127.0.0.1:50052",
+		"-delayed-chains", "1,137", // Only delay chains 1 and 137
 	)
 
 	logFile, _ := os.Create("passthrough-test.log")

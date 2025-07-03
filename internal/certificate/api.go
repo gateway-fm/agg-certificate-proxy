@@ -159,39 +159,94 @@ func formatDuration(seconds int) string {
 	return duration.String()
 }
 
+type CertificateData struct {
+	Config          Config                `json:"config"`
+	SchedulerActive bool                  `json:"scheduler_active"`
+	ChainTotals     map[uint32]*ChainInfo `json:"chain_totals"`
+	Certificates    []CertificateView     `json:"certificates"`
+}
+
+type Config struct {
+	DelayHours  string `json:"delay_hours"`
+	Delay       string `json:"delay"`
+	CurrentTime string `json:"current_time"`
+}
+
+type ChainInfo struct {
+	TotalAmount    *big.Int `json:"total_amount"`
+	FormattedTotal string   `json:"formatted_total"`
+	CertCount      int      `json:"cert_count"`
+}
+
 func (s *APIServer) viewCerts(w http.ResponseWriter, r *http.Request) {
-	certs, err := s.service.GetCertificates()
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get certificates: %v", err), http.StatusInternalServerError)
+	// lets check for an api key here
+	apiKey := r.URL.Query().Get("key")
+	if apiKey == "" {
+		slog.Error("missing API key")
+		http.Error(w, "missing API key", http.StatusUnauthorized)
 		return
 	}
 
-	// Get scheduler status
+	// check if the api key is valid
+	storedKey, err := s.service.db.GetCredential("data_key")
+	if err != nil {
+		slog.Error("error retrieving data key", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(storedKey), []byte(apiKey))
+	if err != nil {
+		slog.Error("invalid API key", "err", err)
+		http.Error(w, "invalid API key", http.StatusUnauthorized)
+		return
+	}
+
+	data, err := s.loadCertificateData()
+	if err != nil {
+		slog.Error("failed to load certificate data", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// lets check what kind of content we should return here
+	contentType := r.Header.Get("Accept")
+
+	switch contentType {
+	case "application/json":
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(data); err != nil {
+			slog.Error("failed to encode certificate data", "err", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+	default:
+		err = homepageTemplate.Execute(w, data)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to execute template: %v", err), http.StatusInternalServerError)
+		}
+	}
+}
+
+func (s *APIServer) loadCertificateData() (CertificateData, error) {
 	schedulerActive, err := s.service.db.GetSchedulerStatus()
 	if err != nil {
 		slog.Error("failed to get scheduler status", "err", err)
 		schedulerActive = true // Default to active if error
 	}
 
-	// Get delay configuration
 	delayStr, err := s.service.GetConfigValue("delay_seconds")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		if _, err := w.Write([]byte("failed to get delay_seconds config value")); err != nil {
-			slog.Error("failed to write error message to response", "err", err)
-			return
-		}
-		return
+		return CertificateData{}, err
 	}
 	delaySeconds, _ := strconv.Atoi(delayStr)
 	delayDuration := time.Duration(delaySeconds) * time.Second
 
-	// Track chain totals for pending certificates
-	type ChainInfo struct {
-		TotalAmount    *big.Int
-		FormattedTotal string
-		CertCount      int
+	certs, err := s.service.GetCertificates()
+	if err != nil {
+		slog.Error("failed to get certificates", "err", err)
+		return CertificateData{}, err
 	}
+
 	chainTotals := make(map[uint32]*ChainInfo)
 
 	// Create views with calculated fields
@@ -312,21 +367,8 @@ func (s *APIServer) viewCerts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prepare template data
-	data := struct {
-		Config struct {
-			DelayHours  string
-			Delay       string
-			CurrentTime string
-		}
-		SchedulerActive bool
-		ChainTotals     map[uint32]*ChainInfo
-		Certificates    []CertificateView
-	}{
-		Config: struct {
-			DelayHours  string
-			Delay       string
-			CurrentTime string
-		}{
+	data := CertificateData{
+		Config: Config{
 			DelayHours:  delayStr, // Keep for backward compatibility in template
 			Delay:       formatDuration(delaySeconds),
 			CurrentTime: time.Now().Format("2006-01-02 15:04:05"),
@@ -336,10 +378,7 @@ func (s *APIServer) viewCerts(w http.ResponseWriter, r *http.Request) {
 		Certificates:    certViews,
 	}
 
-	err = homepageTemplate.Execute(w, data)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to execute template: %v", err), http.StatusInternalServerError)
-	}
+	return data, nil
 }
 
 func (s *APIServer) viewConfig(w http.ResponseWriter, r *http.Request) {

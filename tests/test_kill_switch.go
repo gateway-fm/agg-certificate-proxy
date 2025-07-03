@@ -2,15 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
-	"strings"
 	"syscall"
 	"time"
-	"log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -47,6 +49,7 @@ func runKillSwitchTest() {
 	mockReceiverPort := "50052"
 	killKey := "test-kill-key"
 	restartKey := "test-restart-key"
+	dataKey := "test-data-key"
 	dbFile := "kill-switch-test.db"
 	logFile := "kill-switch-test.log"
 
@@ -101,15 +104,16 @@ func runKillSwitchTest() {
 	// Start proxy with test configuration
 	fmt.Println("Step 2: Starting certificate proxy with short delays...")
 	proxyCmd := exec.Command(proxyPath,
-		"--db", dbFile,
-		"--http", ":8080",
-		"--grpc", ":50051",
-		"--kill-switch-api-key", killKey,
-		"--kill-restart-api-key", restartKey,
-		"--delay", "5s",
-		"--scheduler-interval", "2s",
-		"--aggsender-addr", "127.0.0.1:"+mockReceiverPort,
-		"--delayed-chains", "1,137",
+		"-db", dbFile,
+		"-http", ":8080",
+		"-grpc", ":50051",
+		"-kill-switch-api-key", killKey,
+		"-kill-restart-api-key", restartKey,
+		"-data-key", dataKey,
+		"-delay", "5s",
+		"-scheduler-interval", "2s",
+		"-aggsender-addr", "127.0.0.1:"+mockReceiverPort,
+		"-delayed-chains", "1,137",
 	)
 
 	proxyLogFile, err := os.Create(logFile)
@@ -213,7 +217,7 @@ func runKillSwitchTest() {
 
 	// Check scheduler status
 	fmt.Println("\nStep 6: Verifying scheduler status...")
-	if status := checkSchedulerStatus(httpAddr); status {
+	if status := checkSchedulerStatus(httpAddr, dataKey); status {
 		fmt.Println("❌ ERROR: Scheduler still active after kill switch")
 	} else {
 		fmt.Println("✅ Scheduler stopped successfully")
@@ -241,15 +245,16 @@ func runKillSwitchTest() {
 
 	// Start proxy again
 	proxyCmd = exec.Command(proxyPath,
-		"--db", dbFile,
-		"--http", ":8080",
-		"--grpc", ":50051",
-		"--kill-switch-api-key", killKey,
-		"--kill-restart-api-key", restartKey,
-		"--delay", "5s",
-		"--scheduler-interval", "2s",
-		"--aggsender-addr", "127.0.0.1:"+mockReceiverPort,
-		"--delayed-chains", "1,137",
+		"-db", dbFile,
+		"-http", ":8080",
+		"-grpc", ":50051",
+		"-kill-switch-api-key", killKey,
+		"-kill-restart-api-key", restartKey,
+		"-data-key", dataKey,
+		"-delay", "5s",
+		"-scheduler-interval", "2s",
+		"-aggsender-addr", "127.0.0.1:"+mockReceiverPort,
+		"-delayed-chains", "1,137",
 	)
 	proxyCmd.Stdout = proxyLogFile
 	proxyCmd.Stderr = proxyLogFile
@@ -320,7 +325,7 @@ func runKillSwitchTest() {
 	}
 
 	// Verify scheduler is active
-	if status := checkSchedulerStatus(httpAddr); !status {
+	if status := checkSchedulerStatus(httpAddr, dataKey); !status {
 		fmt.Println("❌ ERROR: Scheduler still stopped after restart")
 	} else {
 		fmt.Println("✅ Scheduler reactivated successfully")
@@ -406,16 +411,41 @@ func submitTestCertificate(proxyAddr string, networkID uint32, height uint64) er
 }
 
 // checkSchedulerStatus checks if the scheduler is active
-func checkSchedulerStatus(httpAddr string) bool {
-	resp, err := http.Get(httpAddr + "/")
+func checkSchedulerStatus(httpAddr, key string) bool {
+	add := fmt.Sprintf("%s?key=%s", httpAddr, key)
+	req, err := http.NewRequest(http.MethodGet, add, nil)
+	if err != nil {
+		slog.Error("failed to create request", "err", err)
+		return false
+	}
+	req.Header.Add("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
 
-	body := make([]byte, 10000)
-	n, _ := resp.Body.Read(body)
-	bodyStr := string(body[:n])
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("failed to get scheduler status", "status", resp.StatusCode)
+		return false
+	}
 
-	return !strings.Contains(bodyStr, "STOPPED")
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Error("failed to read response body", "err", err)
+		return false
+	}
+
+	type Status struct {
+		SchedulerActive bool `json:"scheduler_active"`
+	}
+
+	var status Status
+	err = json.Unmarshal(body, &status)
+	if err != nil {
+		slog.Error("failed to unmarshal response body", "err", err)
+		return false
+	}
+
+	return status.SchedulerActive
 }
