@@ -11,9 +11,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
+	"log/slog"
+
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
-	"log/slog"
 )
 
 // Db defines the interface for database operations.
@@ -115,7 +116,7 @@ func (s *Service) SetDelayedChains(chains []uint32) error {
 }
 
 // ProcessPendingCertificates processes certificates that are ready.
-func (s *Service) ProcessPendingCertificates() {
+func (s *Service) ProcessPendingCertificates(ctx context.Context) {
 	slog.Info("checking for processable certificates...")
 	certs, err := s.db.GetProcessableCertificates()
 	if err != nil {
@@ -131,6 +132,13 @@ func (s *Service) ProcessPendingCertificates() {
 	slog.Info("found processable certificates.", "count", len(certs))
 
 	for _, cert := range certs {
+		select {
+		case <-ctx.Done():
+			slog.Info("context cancelled, stopping certificate processing")
+			return
+		default:
+		}
+
 		if err := s.SendToAggSender(cert); err != nil {
 			slog.Error("error sending certificate to agg sender", "certificate", cert.ID, "err", err)
 			continue
@@ -167,7 +175,7 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			slog.Error("failed to close gRPC connection to aggsender: ", err)
+			slog.Error("failed to close gRPC connection to aggsender", "err", err)
 		}
 	}()
 
