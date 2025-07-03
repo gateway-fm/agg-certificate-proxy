@@ -52,12 +52,18 @@ type CertificateView struct {
 	NetworkID               uint32
 	Height                  uint64
 	WillSendAt              time.Time
-	TotalAmount             string
+	Tokens                  []TokenExit
 	BridgeExitCount         int
 	ImportedBridgeExitCount int
 	PrettyMetadata          string
 	FullPrettyMetadata      string
 	HasFullMetadata         bool
+}
+
+type TokenExit struct {
+	TokenAddress    string
+	Amount          *big.Int
+	AmountFormatted string
 }
 
 // prettyPrintJSON pretty-prints JSON data with indentation
@@ -119,9 +125,8 @@ func truncateJSON(data map[string]interface{}, maxLines int) (string, bool) {
 }
 
 // formatAmount converts wei to a human-readable format with units
-func formatAmount(weiStr string) string {
-	wei, ok := new(big.Int).SetString(weiStr, 10)
-	if !ok || wei.Sign() == 0 {
+func formatAmount(wei *big.Int) string {
+	if wei == nil {
 		return "0 wei"
 	}
 
@@ -168,8 +173,9 @@ type Config struct {
 }
 
 type ChainInfo struct {
-	TotalAmount string `json:"total_amount"`
-	CertCount   int    `json:"cert_count"`
+	TotalAmount    *big.Int `json:"total_amount"`
+	FormattedTotal string   `json:"formatted_total"`
+	CertCount      int      `json:"cert_count"`
 }
 
 func (s *APIServer) viewCerts(w http.ResponseWriter, r *http.Request) {
@@ -267,16 +273,26 @@ func (s *APIServer) loadCertificateData() (CertificateData, error) {
 				}
 
 				// Calculate total amount from bridge exits and imported bridge exits
-				totalAmount := uint64(0)
+				tokenTotals := make(map[string]*TokenExit)
 
 				// Count and sum bridge exits
 				if bridgeExits, ok := meta["bridge_exits"].([]interface{}); ok {
 					view.BridgeExitCount = len(bridgeExits)
 					for _, be := range bridgeExits {
 						if beMap, ok := be.(map[string]interface{}); ok {
+							token := ""
+							if tokenAddress, ok := beMap["token_address"].(string); ok {
+								token = tokenAddress
+							}
 							if amountStr, ok := beMap["amount"].(string); ok {
 								if amount, err := strconv.ParseUint(amountStr, 10, 64); err == nil {
-									totalAmount += amount
+									asBig := big.NewInt(0).SetUint64(amount)
+									if t, ok := tokenTotals[token]; !ok {
+										tokenTotals[token] = &TokenExit{TokenAddress: token, Amount: asBig, AmountFormatted: formatAmount(asBig)}
+									} else {
+										t.Amount.Add(t.Amount, asBig)
+										t.AmountFormatted = formatAmount(t.Amount)
+									}
 								}
 							}
 						}
@@ -291,9 +307,19 @@ func (s *APIServer) loadCertificateData() (CertificateData, error) {
 					view.ImportedBridgeExitCount = len(importedExits)
 					for _, ibe := range importedExits {
 						if ibeMap, ok := ibe.(map[string]interface{}); ok {
+							token := ""
+							if tokenAddress, ok := ibeMap["token_address"].(string); ok {
+								token = tokenAddress
+							}
 							if amountStr, ok := ibeMap["amount"].(string); ok {
 								if amount, err := strconv.ParseUint(amountStr, 10, 64); err == nil {
-									totalAmount += amount
+									asBig := big.NewInt(0).SetUint64(amount)
+									if t, ok := tokenTotals[token]; !ok {
+										tokenTotals[token] = &TokenExit{TokenAddress: token, Amount: asBig, AmountFormatted: formatAmount(asBig)}
+									} else {
+										t.Amount.Add(t.Amount, asBig)
+										t.AmountFormatted = formatAmount(t.Amount)
+									}
 								}
 							}
 						}
@@ -303,7 +329,10 @@ func (s *APIServer) loadCertificateData() (CertificateData, error) {
 					view.ImportedBridgeExitCount = int(ibeCount)
 				}
 
-				view.TotalAmount = formatAmount(fmt.Sprintf("%d", totalAmount))
+				view.Tokens = make([]TokenExit, 0)
+				for _, t := range tokenTotals {
+					view.Tokens = append(view.Tokens, *t)
+				}
 
 				// Create truncated version for display
 				truncated, wasTruncated := truncateJSON(meta, 8)
@@ -313,15 +342,15 @@ func (s *APIServer) loadCertificateData() (CertificateData, error) {
 				// Add to chain totals if this is a pending certificate
 				if !cert.ProcessedAt.Valid && view.NetworkID > 0 {
 					if chainTotals[view.NetworkID] == nil {
-						chainTotals[view.NetworkID] = &ChainInfo{TotalAmount: "0", CertCount: 0}
+						chainTotals[view.NetworkID] = &ChainInfo{TotalAmount: big.NewInt(0), CertCount: 0}
 					}
 					chainInfo := chainTotals[view.NetworkID]
 					chainInfo.CertCount++
 
 					// Parse and add to total
-					currentTotal, _ := strconv.ParseUint(chainInfo.TotalAmount, 10, 64)
-					currentTotal += totalAmount
-					chainInfo.TotalAmount = fmt.Sprintf("%d", currentTotal)
+					for _, t := range tokenTotals {
+						chainInfo.TotalAmount.Add(chainInfo.TotalAmount, t.Amount)
+					}
 				}
 			} else {
 				// If parsing fails, just show the raw metadata
@@ -334,7 +363,7 @@ func (s *APIServer) loadCertificateData() (CertificateData, error) {
 
 	// Format chain totals after accumulation
 	for _, info := range chainTotals {
-		info.TotalAmount = formatAmount(info.TotalAmount)
+		info.FormattedTotal = formatAmount(info.TotalAmount)
 	}
 
 	// Prepare template data

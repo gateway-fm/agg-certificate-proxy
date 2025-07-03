@@ -72,14 +72,24 @@
             background-color: white;
         }
 
+        table.certificates {
+            font-size: 0.8em;
+        }
+        .tokens {
+            word-wrap: break-word;
+        }
+        .tokens div {
+            margin-bottom: 10px;
+        }
+
         /* Column widths */
-        th:nth-child(1), td:nth-child(1) { width: 5%; }  /* ID */
-        th:nth-child(2), td:nth-child(2) { width: 8%; }  /* Network ID */
-        th:nth-child(3), td:nth-child(3) { width: 8%; }  /* Height */
+        th:nth-child(1), td:nth-child(1) { width: 2%; }  /* ID */
+        th:nth-child(2), td:nth-child(2) { width: 2%; }  /* Network ID */
+        th:nth-child(3), td:nth-child(3) { width: 2%; }  /* Height */
         th:nth-child(4), td:nth-child(4) { width: 12%; } /* Received At */
         th:nth-child(5), td:nth-child(5) { width: 12%; } /* Will Send At */
-        th:nth-child(6), td:nth-child(6) { width: 15%; } /* Status */
-        th:nth-child(7), td:nth-child(7) { width: 10%; } /* Total Amount */
+        th:nth-child(6), td:nth-child(6) { width: 5%; } /* Status */
+        th:nth-child(7), td:nth-child(7) { width: 32%; } /* Tokens */
         th:nth-child(8), td:nth-child(8) { width: 10%; } /* Exit Count */
         th:nth-child(9), td:nth-child(9) { width: 20%; } /* Metadata */
 
@@ -126,13 +136,13 @@
     <table class="chain-totals">
         <tr>
             <th>Chain ID</th>
-            <th>Total Held Amount</th>
+            <th>Total Held Amount (all tokens)</th>
             <th>Certificate Count</th>
         </tr>
         {{range $chainID, $info := .ChainTotals}}
         <tr>
             <td>{{$chainID}}</td>
-            <td>{{$info.TotalAmount}}</td>
+            <td>{{$info.FormattedTotal}}</td>
             <td>{{$info.CertCount}}</td>
         </tr>
         {{else}}
@@ -144,7 +154,7 @@
 </div>
 
 <h2>Certificates</h2>
-<table>
+<table class="certificates">
     <tr>
         <th>ID</th>
         <th>Network ID</th>
@@ -152,7 +162,7 @@
         <th>Received At</th>
         <th>Will Send At</th>
         <th>Status</th>
-        <th>Total Amount</th>
+        <th>Tokens</th>
         <th>Exit Count</th>
         <th>Metadata</th>
     </tr>
@@ -164,7 +174,14 @@
         <td>{{.ReceivedAt.Format "2006-01-02 15:04:05"}}</td>
         <td>{{.WillSendAt.Format "2006-01-02 15:04:05"}}</td>
         <td>{{if .ProcessedAt.Valid}}Processed at {{.ProcessedAt.Time.Format "2006-01-02 15:04:05"}}{{else}}Pending{{end}}</td>
-        <td>{{.TotalAmount}}</td>
+        <td class="tokens">
+            {{range .Tokens}}
+                <div>
+                    <strong>{{if eq .TokenAddress ""}}Native Token{{else}}{{.TokenAddress}}{{end}}: </strong>
+                    {{.AmountFormatted}}
+                </div>
+            {{end}}
+        </td>
         <td>BE: {{.BridgeExitCount}}, IBE: {{.ImportedBridgeExitCount}}</td>
         <td class="metadata">
             <pre>{{.PrettyMetadata}}</pre>
