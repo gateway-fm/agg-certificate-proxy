@@ -320,3 +320,26 @@ func (s *SqliteStore) CleanupOldKillSwitchAttempts(olderThan time.Duration) erro
 	}
 	return nil
 }
+
+func (s *SqliteStore) GetUnprocessedCertificates() ([]Certificate, error) {
+	rows, err := s.db.Query("SELECT id, raw_proto, received_at, processed_at, metadata FROM certificates WHERE processed_at IS NULL")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query for unprocessed certificates: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			slog.Error("failed to close certificates query", "err", closeErr)
+		}
+	}()
+
+	var certs []Certificate
+	for rows.Next() {
+		var cert Certificate
+		if err := rows.Scan(&cert.ID, &cert.RawProto, &cert.ReceivedAt, &cert.ProcessedAt, &cert.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to scan certificate row: %w", err)
+		}
+		certs = append(certs, cert)
+	}
+
+	return certs, nil
+}

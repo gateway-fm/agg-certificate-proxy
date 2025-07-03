@@ -144,8 +144,15 @@ func main() {
 	}
 	scheduler.Start()
 
-	metricsUpdater := metrics.NewUpdater(certificateService)
+	reporter := metrics.NewPrometheusReporter(currentChains)
+
+	metricsUpdater := metrics.NewUpdater(certificateService, reporter)
 	metricsUpdater.Start(ctx)
+
+	// handle metrics
+	reporter.WireUpHttpMetrics()
+	// get the initial metrics for the current state
+	metricsUpdater.Trigger()
 
 	// Create and register gRPC server
 	grpcServer := grpc.NewServer()
@@ -168,9 +175,6 @@ func main() {
 	// Then register health API handlers
 	healthApi := proxyhealth.NewApi()
 	healthApi.RegisterHandlers()
-
-	// handle metrics
-	metrics.WireUpHttpMetrics()
 
 	// Start HTTP server with cancellation context
 	httpServer := &http.Server{

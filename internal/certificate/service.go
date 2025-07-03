@@ -34,6 +34,7 @@ type Db interface {
 	RecordKillSwitchAttempt(attemptType string) error
 	GetRecentKillSwitchAttempts(attemptType string, duration time.Duration) (int, error)
 	CleanupOldKillSwitchAttempts(olderThan time.Duration) error
+	GetUnprocessedCertificates() ([]Certificate, error)
 }
 
 // Service handles the business logic for certificates.
@@ -220,4 +221,8 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 	}
 
 	return nil
+}
+
+func (s *Service) GetUnprocessedCertificates() ([]Certificate, error) {
+	return s.db.GetUnprocessedCertificates()
 }
