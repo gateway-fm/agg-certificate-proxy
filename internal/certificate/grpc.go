@@ -132,6 +132,10 @@ func extractMetadata(cert *typesv1.Certificate) map[string]interface{} {
 					if be.GetDestAddress() != nil && be.GetDestAddress().Value != nil {
 						beMap["dest_address"] = fmt.Sprintf("0x%x", be.GetDestAddress().Value)
 					}
+					token := be.GetTokenInfo()
+					if token != nil && token.OriginTokenAddress != nil && token.OriginTokenAddress.Value != nil {
+						beMap["token_address"] = fmt.Sprintf("0x%x", token.OriginTokenAddress.Value)
+					}
 					bridgeExits = append(bridgeExits, beMap)
 				}
 			}
@@ -154,6 +158,10 @@ func extractMetadata(cert *typesv1.Certificate) map[string]interface{} {
 					}
 					if ibe.GetBridgeExit().GetDestAddress() != nil && ibe.GetBridgeExit().GetDestAddress().Value != nil {
 						ibeMap["dest_address"] = fmt.Sprintf("0x%x", ibe.GetBridgeExit().GetDestAddress().Value)
+					}
+					token := ibe.GetBridgeExit().GetTokenInfo()
+					if token != nil && token.OriginTokenAddress != nil && token.OriginTokenAddress.Value != nil {
+						ibeMap["token_address"] = fmt.Sprintf("0x%x", token.OriginTokenAddress.Value)
 					}
 					if ibe.GetGlobalIndex() != nil && ibe.GetGlobalIndex().Value != nil {
 						ibeMap["global_index"] = fmt.Sprintf("0x%x", ibe.GetGlobalIndex().Value)
