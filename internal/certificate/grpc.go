@@ -4,28 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
+
+	"log/slog"
 
 	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	nodev1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
-	"log/slog"
 )
 
 // GRPCServer handles incoming gRPC requests for certificate submission.
 type GRPCServer struct {
 	nodev1.UnimplementedCertificateSubmissionServiceServer
-	service *Service
+	service        *Service
+	metricsUpdater MetricsUpdater
+}
+
+type MetricsUpdater interface {
+	Trigger()
 }
 
 // NewGRPCServer creates a new gRPC server.
-func NewGRPCServer(service *Service) *GRPCServer {
-	return &GRPCServer{service: service}
+func NewGRPCServer(service *Service, metricsUpdater MetricsUpdater) *GRPCServer {
+	return &GRPCServer{service: service, metricsUpdater: metricsUpdater}
 }
 
 // SubmitCertificate handles the submission of a new certificate.
 func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCertificateRequest) (*nodev1.SubmitCertificateResponse, error) {
+	defer s.metricsUpdater.Trigger()
+
 	slog.Info("received certificate submission request")
 
 	// Marshal the request to store it as a blob

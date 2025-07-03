@@ -15,12 +15,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
-	proxyhealth "github.com/gateway-fm/agg-certificate-proxy/internal/health"
-	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/grpc"
 	"errors"
 	"sync"
+
+	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
+	proxyhealth "github.com/gateway-fm/agg-certificate-proxy/internal/health"
+	"github.com/gateway-fm/agg-certificate-proxy/internal/metrics"
+	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -142,9 +144,12 @@ func main() {
 	}
 	scheduler.Start()
 
+	metricsUpdater := metrics.NewUpdater(certificateService)
+	metricsUpdater.Start(ctx)
+
 	// Create and register gRPC server
 	grpcServer := grpc.NewServer()
-	certGrpcServer := certificate.NewGRPCServer(certificateService)
+	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater)
 	certGrpcServer.Register(grpcServer)
 
 	// Start gRPC server in goroutine
@@ -163,6 +168,9 @@ func main() {
 	// Then register health API handlers
 	healthApi := proxyhealth.NewApi()
 	healthApi.RegisterHandlers()
+
+	// handle metrics
+	metrics.WireUpHttpMetrics()
 
 	// Start HTTP server with cancellation context
 	httpServer := &http.Server{
