@@ -21,8 +21,8 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 go build \
-    -ldflags="-w -s -extldflags=-static" \
+RUN CGO_ENABLED=0 GOOS=linux go build -a \
+    -ldflags='-extldflags "-static"' \
     -o /app/proxy \
     ./cmd/proxy
 
@@ -30,18 +30,19 @@ RUN CGO_ENABLED=0 go build \
 FROM gcr.io/distroless/static-debian12:nonroot
 
 # Copy the binary from builder stage
-COPY --from=builder /app/proxy /app/proxy
+COPY --from=builder /app/proxy /proxy
 
 # Copy timezone data
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-
-# Set working directory
-WORKDIR /app
 
 # Expose the default ports
 # 50051 for gRPC server
 # 8080 for HTTP server
 EXPOSE 50051 8080
 
+USER nonroot:nonroot
+VOLUME ["/data"]
+WORKDIR /data
+
 # Run the application
-ENTRYPOINT ["/app/proxy"]
+ENTRYPOINT ["/proxy"]
