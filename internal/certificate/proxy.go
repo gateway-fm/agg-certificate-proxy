@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -52,17 +51,9 @@ func (p *TransparentProxy) Close() error {
 // TransparentUnaryHandler creates a UnaryServerInterceptor that forwards requests
 func (p *TransparentProxy) TransparentUnaryHandler() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// Check if this is a certificate submission - let it pass through to our handler
-		if strings.Contains(info.FullMethod, "CertificateSubmissionService/SubmitCertificate") {
-			return handler(ctx, req)
-		}
-
-		// For all other requests, proxy to backend
-		slog.Info("proxying unary request to backend", "method", info.FullMethod, "backend", p.backendAddr)
-
-		// Since we're using the unknown service handler for non-certificate services,
-		// this interceptor will only be called for registered services (certificate submission)
-		// All other services will be handled by the UnknownServiceHandler
+		// This interceptor is only called for registered services (certificate submission)
+		// All other services are handled by the UnknownServiceHandler
+		slog.Info("handling request", "method", info.FullMethod)
 		return handler(ctx, req)
 	}
 }
@@ -70,13 +61,9 @@ func (p *TransparentProxy) TransparentUnaryHandler() grpc.UnaryServerInterceptor
 // TransparentStreamHandler creates a StreamServerInterceptor that forwards streaming requests
 func (p *TransparentProxy) TransparentStreamHandler() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		// Check if this is a certificate submission stream - let it pass through
-		if strings.Contains(info.FullMethod, "CertificateSubmissionService") {
-			return handler(srv, ss)
-		}
-
-		// For all other streams, they will be handled by UnknownServiceHandler
-		slog.Info("stream request detected", "method", info.FullMethod, "backend", p.backendAddr)
+		// This interceptor is only called for registered services
+		// All other services are handled by the UnknownServiceHandler
+		slog.Info("handling stream request", "method", info.FullMethod)
 		return handler(srv, ss)
 	}
 }
