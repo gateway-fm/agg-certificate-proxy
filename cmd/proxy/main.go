@@ -20,6 +20,7 @@ import (
 
 	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
 	proxyhealth "github.com/gateway-fm/agg-certificate-proxy/internal/health"
+	"github.com/gateway-fm/agg-certificate-proxy/internal/metrics"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
 )
@@ -153,9 +154,19 @@ func main() {
 	}
 	scheduler.Start()
 
+	reporter := metrics.NewPrometheusReporter(currentChains)
+
+	metricsUpdater := metrics.NewUpdater(certificateService, reporter)
+	metricsUpdater.Start(ctx)
+
+	// handle metrics
+	reporter.WireUpHttpMetrics()
+	// get the initial metrics for the current state
+	metricsUpdater.Trigger()
+
 	// Create and register gRPC server
 	grpcServer := grpc.NewServer()
-	certGrpcServer := certificate.NewGRPCServer(certificateService)
+	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater)
 	certGrpcServer.Register(grpcServer)
 
 	// Start gRPC server in goroutine
