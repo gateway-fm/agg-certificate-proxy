@@ -213,8 +213,10 @@ func main() {
 
 	// Start HTTP server with cancellation context
 	httpServer := &http.Server{
-		Addr:    *httpAddr,
-		Handler: http.DefaultServeMux,
+		Addr:              *httpAddr,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Second,
+		Handler:           http.DefaultServeMux,
 		BaseContext: func(net.Listener) context.Context {
 			return ctx
 		},
