@@ -45,7 +45,7 @@ transparent-proxy-e2e: build-proxy ## Run transparent proxy test
 	@go run . -transparent-proxy
 
 .PHONY: all
-all: kill-switch passthrough graceful-shutdown metrics transparent-proxy ## Run all tests
+all: kill-switch passthrough graceful-shutdown metrics transparent-proxy-e2e ## Run all tests
 
 .PHONY: clean
 clean: ## Clean up test artifacts
