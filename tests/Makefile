@@ -39,8 +39,13 @@ metrics: build-proxy ## Run metrics test
 	@echo "Running metrics test..."
 	@go run . -metrics
 
+.PHONY: transparent-proxy-e2e
+transparent-proxy-e2e: build-proxy ## Run transparent proxy test
+	@echo "Running transparent proxy test..."
+	@go run . -transparent-proxy
+
 .PHONY: all
-all: kill-switch passthrough graceful-shutdown metrics ## Run all tests
+all: kill-switch passthrough graceful-shutdown metrics transparent-proxy-e2e ## Run all tests
 
 .PHONY: clean
 clean: ## Clean up test artifacts

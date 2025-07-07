@@ -104,16 +104,16 @@ func runKillSwitchTest() {
 	// Start proxy with test configuration
 	fmt.Println("Step 2: Starting certificate proxy with short delays...")
 	proxyCmd := exec.Command(proxyPath,
-		"-db", dbFile,
-		"-http", ":8080",
-		"-grpc", ":50051",
-		"-kill-switch-api-key", killKey,
-		"-kill-restart-api-key", restartKey,
-		"-data-key", dataKey,
-		"-delay", "5s",
-		"-scheduler-interval", "2s",
-		"-aggsender-addr", "127.0.0.1:"+mockReceiverPort,
-		"-delayed-chains", "1,137",
+		"--db", dbFile,
+		"--http", ":8080",
+		"--grpc", ":50051",
+		"--kill-switch-api-key", killKey,
+		"--kill-restart-api-key", restartKey,
+		"--data-key", dataKey,
+		"--delay", "5s",
+		"--scheduler-interval", "2s",
+		"--aggsender-addr", "127.0.0.1:"+mockReceiverPort,
+		"--delayed-chains", "1,137",
 	)
 
 	proxyLogFile, err := os.Create(logFile)
@@ -245,16 +245,16 @@ func runKillSwitchTest() {
 
 	// Start proxy again
 	proxyCmd = exec.Command(proxyPath,
-		"-db", dbFile,
-		"-http", ":8080",
-		"-grpc", ":50051",
-		"-kill-switch-api-key", killKey,
-		"-kill-restart-api-key", restartKey,
-		"-data-key", dataKey,
-		"-delay", "5s",
-		"-scheduler-interval", "2s",
-		"-aggsender-addr", "127.0.0.1:"+mockReceiverPort,
-		"-delayed-chains", "1,137",
+		"--db", dbFile,
+		"--http", ":8080",
+		"--grpc", ":50051",
+		"--kill-switch-api-key", killKey,
+		"--kill-restart-api-key", restartKey,
+		"--data-key", dataKey,
+		"--delay", "5s",
+		"--scheduler-interval", "2s",
+		"--aggsender-addr", "127.0.0.1:"+mockReceiverPort,
+		"--delayed-chains", "1,137",
 	)
 	proxyCmd.Stdout = proxyLogFile
 	proxyCmd.Stderr = proxyLogFile

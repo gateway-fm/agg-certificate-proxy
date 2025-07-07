@@ -164,8 +164,33 @@ func main() {
 	// get the initial metrics for the current state
 	metricsUpdater.Trigger()
 
+	// Create transparent proxy if aggsender address is provided
+	var transparentProxy *certificate.TransparentProxy
+	var grpcOpts []grpc.ServerOption
+
+	if *aggsenderAddr != "" {
+		transparentProxy, err = certificate.NewTransparentProxy(*aggsenderAddr)
+		if err != nil {
+			log.Fatalf("Failed to create transparent proxy: %v", err)
+		}
+		defer func() {
+			if closeErr := transparentProxy.Close(); closeErr != nil {
+				slog.Error("failed to close transparent proxy", "err", closeErr)
+			}
+		}()
+
+		// Add interceptors and unknown service handler
+		grpcOpts = append(grpcOpts,
+			grpc.UnaryInterceptor(transparentProxy.TransparentUnaryHandler()),
+			grpc.StreamInterceptor(transparentProxy.TransparentStreamHandler()),
+			grpc.UnknownServiceHandler(transparentProxy.UnknownServiceHandler()),
+		)
+
+		slog.Info("transparent proxy enabled", "backend", *aggsenderAddr)
+	}
+
 	// Create and register gRPC server
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpcOpts...)
 	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater)
 	certGrpcServer.Register(grpcServer)
 

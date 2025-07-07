@@ -12,6 +12,7 @@ func main() {
 	gracefulShutdownTest := flag.Bool("graceful-shutdown", false, "Run graceful shutdown test")
 	sendTest := flag.Bool("send", false, "Send random certificate to local instance")
 	metricsTest := flag.Bool("metrics", false, "Run metrics test")
+	transparentProxyTest := flag.Bool("transparent-proxy", false, "Run transparent proxy test")
 	flag.Parse()
 
 	if len(os.Args) == 1 {
@@ -24,6 +25,7 @@ func main() {
 		fmt.Println("  go run tests/*.go -graceful-shutdown  Run graceful shutdown test")
 		fmt.Println("  go run tests/*.go -send           Send random certificate to local instance")
 		fmt.Println("  go run tests/*.go -metrics         Run metrics test")
+		fmt.Println("  go run tests/*.go -transparent-proxy Run transparent proxy test")
 		return
 	}
 
@@ -49,6 +51,11 @@ func main() {
 
 	if *metricsTest {
 		runMetricsIntegrationTest()
+		return
+	}
+
+	if *transparentProxyTest {
+		runTransparentProxyE2ETest()
 		return
 	}
 }
