@@ -14,9 +14,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 
 	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
@@ -42,7 +40,12 @@ func newMockBackend() *mockBackend {
 // CertificateSubmissionService - should NOT be called through proxy
 func (m *mockBackend) SubmitCertificate(ctx context.Context, req *v1.SubmitCertificateRequest) (*v1.SubmitCertificateResponse, error) {
 	m.callCounts["SubmitCertificate"]++
-	return nil, status.Error(codes.Internal, "backend SubmitCertificate should not be called through proxy")
+	fmt.Printf("Backend: SubmitCertificate called for network %d\n", req.Certificate.NetworkId)
+	return &v1.SubmitCertificateResponse{
+		CertificateId: &typesv1.CertificateId{
+			Value: &interopv1.FixedBytes32{Value: []byte("test-cert-id-12345")},
+		},
+	}, nil
 }
 
 // NodeStateService methods - should be forwarded through proxy
@@ -109,7 +112,6 @@ func runTransparentProxyE2ETest() {
 	// Test configuration
 	proxyAddr := "127.0.0.1:50071"
 	backendAddr := "127.0.0.1:50072"
-	receiverAddr := "127.0.0.1:50073"
 	dbFile := "transparent-proxy-e2e-test.db"
 	logFile := "transparent-proxy-e2e-test.log"
 
@@ -117,7 +119,6 @@ func runTransparentProxyE2ETest() {
 	defer func() {
 		os.Remove(dbFile)
 		os.Remove(logFile)
-		os.Remove("mock-receiver.log")
 	}()
 
 	// Step 1: Start mock backend with all services
@@ -144,18 +145,8 @@ func runTransparentProxyE2ETest() {
 	time.Sleep(500 * time.Millisecond)
 	fmt.Printf("✅ Mock backend started on %s with all services\n", backendAddr)
 
-	// Step 2: Start mock receiver for certificates
-	fmt.Println("\nStep 2: Starting mock certificate receiver...")
-	receiverCmd, err := startMockReceiver("50073")
-	if err != nil {
-		log.Fatalf("Failed to start mock receiver: %v", err)
-	}
-	defer receiverCmd.Process.Kill()
-	time.Sleep(500 * time.Millisecond)
-	fmt.Printf("✅ Mock receiver started on %s\n", receiverAddr)
-
-	// Step 3: Start proxy with transparent forwarding
-	fmt.Println("\nStep 3: Starting certificate proxy with transparent forwarding...")
+	// Step 2: Start proxy with transparent forwarding
+	fmt.Println("\nStep 2: Starting certificate proxy with transparent forwarding...")
 	proxyLogFileHandle, err := os.Create(logFile)
 	if err != nil {
 		log.Fatalf("Failed to create log file: %v", err)
@@ -169,7 +160,7 @@ func runTransparentProxyE2ETest() {
 		"--db", dbFile,
 		"--delayed-chains", "1",
 		"--delay", "3s",
-		"--scheduler-interval", "1s",
+		"--scheduler-interval", "500ms",
 		"--kill-switch-api-key", "test-key",
 		"--kill-restart-api-key", "test-key",
 		"--data-key", "test-data-key",
@@ -286,9 +277,8 @@ func runTransparentProxyE2ETest() {
 
 	// Test 6: Verify certificate delay
 	fmt.Println("\n==== Test 6: Certificate Delay Verification ====")
-	// Check receiver log should be empty initially
-	receiverLog, _ := os.ReadFile("mock-receiver.log")
-	if len(receiverLog) == 0 {
+	submissionCount := backend.callCounts["SubmitCertificate"]
+	if submissionCount == 0 {
 		fmt.Println("✅ Certificate not sent immediately (correctly delayed)")
 	} else {
 		fmt.Println("❌ Certificate was sent immediately (should be delayed)")
@@ -296,11 +286,11 @@ func runTransparentProxyE2ETest() {
 
 	// Wait for delay period
 	fmt.Println("Waiting for certificate delay period (3s)...")
-	time.Sleep(4 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// Check if certificate was eventually sent
-	receiverLog, _ = os.ReadFile("mock-receiver.log")
-	if len(receiverLog) > 0 {
+	submissionCount = backend.callCounts["SubmitCertificate"]
+	if submissionCount == 1 {
 		fmt.Println("✅ Delayed certificate was sent after delay period")
 	} else {
 		fmt.Println("❌ Delayed certificate was not sent")
@@ -308,8 +298,6 @@ func runTransparentProxyE2ETest() {
 
 	// Test 7: Non-delayed certificate submission
 	fmt.Println("\n==== Test 7: Non-delayed Certificate (immediate forward) ====")
-	os.WriteFile("mock-receiver.log", []byte{}, 0644) // Clear log
-
 	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
 		Certificate: &typesv1.Certificate{
 			NetworkId:         999, // Not in delayed list
@@ -326,8 +314,8 @@ func runTransparentProxyE2ETest() {
 
 	// Should be sent immediately
 	time.Sleep(500 * time.Millisecond)
-	receiverLog, _ = os.ReadFile("mock-receiver.log")
-	if len(receiverLog) > 0 {
+	submissionCount = backend.callCounts["SubmitCertificate"]
+	if submissionCount == 2 {
 		fmt.Println("✅ Non-delayed certificate was sent immediately")
 	} else {
 		fmt.Println("❌ Non-delayed certificate was not sent immediately")
@@ -342,7 +330,7 @@ func runTransparentProxyE2ETest() {
 	fmt.Printf("  GetEpochConfiguration: %d\n", backend.callCounts["GetEpochConfiguration"])
 
 	// Check if all tests passed
-	allPassed := backend.callCounts["SubmitCertificate"] == 0 &&
+	allPassed := backend.callCounts["SubmitCertificate"] == 2 &&
 		backend.callCounts["GetCertificateHeader"] == 1 &&
 		backend.callCounts["GetLatestCertificateHeader"] == 2 &&
 		backend.callCounts["GetEpochConfiguration"] == 1

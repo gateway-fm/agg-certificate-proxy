@@ -164,11 +164,6 @@ func main() {
 	// get the initial metrics for the current state
 	metricsUpdater.Trigger()
 
-	// Create and register gRPC server
-	grpcServer := grpc.NewServer()
-	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater)
-	certGrpcServer.Register(grpcServer)
-
 	// Create transparent proxy if aggsender address is provided
 	var transparentProxy *certificate.TransparentProxy
 	var grpcOpts []grpc.ServerOption
@@ -193,6 +188,11 @@ func main() {
 
 		slog.Info("transparent proxy enabled", "backend", *aggsenderAddr)
 	}
+
+	// Create and register gRPC server
+	grpcServer := grpc.NewServer(grpcOpts...)
+	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater)
+	certGrpcServer.Register(grpcServer)
 
 	// Start gRPC server in goroutine
 	go func() {
