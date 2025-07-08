@@ -58,29 +58,33 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 		isDelayed = true
 	}
 
+	var resp *nodev1.SubmitCertificateResponse
+
 	if isDelayed {
 		slog.Info("network is on the delay list. Storing certificate for delayed processing.", "network", networkID)
 		if err := s.service.StoreCertificate(rawProto, string(metadataJson)); err != nil {
 			return nil, fmt.Errorf("failed to store certificate: %w", err)
 		}
+		resp = &nodev1.SubmitCertificateResponse{
+			CertificateId: &typesv1.CertificateId{
+				Value: &interopv1.FixedBytes32{
+					Value: []byte("certificate-processed-id"), // Dummy ID
+				},
+			},
+		}
 	} else {
 		slog.Info("network is not on the delay list. Sending certificate straight through.", "network", networkID)
 		// Send immediately
 		cert := Certificate{ID: 0, RawProto: rawProto, Metadata: string(metadataJson)}
-		if err := s.service.SendToAggSender(cert); err != nil {
+		resp, err = s.service.SendToAggSender(cert)
+		if err != nil {
 			slog.Error("failed to send certificate immediately", "err", err)
 			return nil, fmt.Errorf("failed to send certificate immediately: %w", err)
 		}
 		slog.Info("successfully sent certificate for network immediately", "network", networkID)
 	}
 
-	return &nodev1.SubmitCertificateResponse{
-		CertificateId: &typesv1.CertificateId{
-			Value: &interopv1.FixedBytes32{
-				Value: []byte("certificate-processed-id"), // Dummy ID
-			},
-		},
-	}, nil
+	return resp, nil
 }
 
 // Register registers the gRPC service.
