@@ -72,7 +72,7 @@ func runPassthroughTest() {
 
 	// Submit a non-delayed certificate
 	fmt.Println("4. Submitting certificate for chain 10 (should pass through)...")
-	if err := submitTestCertificate("127.0.0.1:50054", 10, 100); err != nil {
+	if err := submitTestCertificate("127.0.0.1:50054", 10, 100, 1000); err != nil {
 		fmt.Printf("   ❌ Failed: %v\n", err)
 	}
 

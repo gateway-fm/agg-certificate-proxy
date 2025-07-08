@@ -60,8 +60,16 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 
 	var resp *nodev1.SubmitCertificateResponse
 
-	if isDelayed {
-		slog.Info("network is on the delay list. Storing certificate for delayed processing.", "network", networkID)
+	var withdrawalValue uint64
+	for _, bridgeExit := range req.Certificate.GetBridgeExits() {
+		withdrawalValue += bytesToUint64(bridgeExit.GetAmount().Value)
+	}
+
+	slog.Info("withdrawal value", "value", withdrawalValue)
+
+	// we only lock away certificates that have a withdrawal value if it is just imports then we allow them to go through
+	if isDelayed && withdrawalValue > 0 {
+		slog.Info("network is on the delay list. storing certificate for delayed processing.", "network", networkID)
 		if err := s.service.StoreCertificate(rawProto, string(metadataJson)); err != nil {
 			return nil, fmt.Errorf("failed to store certificate: %w", err)
 		}
@@ -73,7 +81,7 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 			},
 		}
 	} else {
-		slog.Info("network is not on the delay list. Sending certificate straight through.", "network", networkID)
+		slog.Info("sending certificate straight through.", "network", networkID)
 		// Send immediately
 		cert := Certificate{ID: 0, RawProto: rawProto, Metadata: string(metadataJson)}
 		resp, err = s.service.SendToAggSender(cert)

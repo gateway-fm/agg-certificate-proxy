@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -167,18 +168,18 @@ func runKillSwitchTest() {
 
 	// Submit test certificates
 	fmt.Println("Step 3: Submitting test certificates to delayed chains...")
-	if err := submitTestCertificate(proxyAddr, 1, 100); err != nil {
+	if err := submitTestCertificate(proxyAddr, 1, 100, 1000); err != nil {
 		fmt.Printf("  ❌ Failed to submit certificate for chain 1: %v\n", err)
 		// Show proxy log for debugging
 		proxyLog, _ := os.ReadFile(logFile)
 		fmt.Printf("\nProxy log:\n%s\n", string(proxyLog[max(0, len(proxyLog)-2000):]))
 		log.Fatalf("Test failed: Could not submit certificate")
 	}
-	if err := submitTestCertificate(proxyAddr, 137, 200); err != nil {
+	if err := submitTestCertificate(proxyAddr, 137, 200, 1000); err != nil {
 		fmt.Printf("  ❌ Failed to submit certificate for chain 137: %v\n", err)
 		log.Fatalf("Test failed: Could not submit certificate")
 	}
-	if err := submitTestCertificate(proxyAddr, 10, 300); err != nil {
+	if err := submitTestCertificate(proxyAddr, 10, 300, 1000); err != nil {
 		fmt.Printf("  ❌ Failed to submit certificate for chain 10: %v\n", err)
 		log.Fatalf("Test failed: Could not submit certificate")
 	}
@@ -287,11 +288,11 @@ func runKillSwitchTest() {
 
 	// Submit more certificates
 	fmt.Println("Step 9: Submitting more certificates after restart...")
-	if err := submitTestCertificate(proxyAddr, 1, 400); err != nil {
+	if err := submitTestCertificate(proxyAddr, 1, 400, 1000); err != nil {
 		fmt.Printf("  ❌ Failed to submit certificate for chain 1: %v\n", err)
 		log.Fatalf("Test failed: Could not submit certificate after restart")
 	}
-	if err := submitTestCertificate(proxyAddr, 137, 500); err != nil {
+	if err := submitTestCertificate(proxyAddr, 137, 500, 1000); err != nil {
 		fmt.Printf("  ❌ Failed to submit certificate for chain 137: %v\n", err)
 		log.Fatalf("Test failed: Could not submit certificate after restart")
 	}
@@ -379,7 +380,7 @@ func startMockReceiver(port string) (*exec.Cmd, error) {
 }
 
 // submitTestCertificate submits a test certificate to the proxy
-func submitTestCertificate(proxyAddr string, networkID uint32, height uint64) error {
+func submitTestCertificate(proxyAddr string, networkID uint32, height, withdrawalValue uint64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -399,6 +400,18 @@ func submitTestCertificate(proxyAddr string, networkID uint32, height uint64) er
 			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: make([]byte, 32)},
 			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: make([]byte, 32)},
 		},
+	}
+
+	if withdrawalValue > 0 {
+		req.Certificate.BridgeExits = []*interopv1.BridgeExit{
+			{
+				TokenInfo: &interopv1.TokenInfo{
+					OriginNetwork:      1,
+					OriginTokenAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+				},
+				Amount: &interopv1.FixedBytes32{Value: uint64ToBytes(withdrawalValue)},
+			},
+		}
 	}
 
 	_, err = client.SubmitCertificate(ctx, req)
@@ -448,4 +461,10 @@ func checkSchedulerStatus(httpAddr, key string) bool {
 	}
 
 	return status.SchedulerActive
+}
+
+func uint64ToBytes(value uint64) []byte {
+	bytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(bytes, value)
+	return bytes
 }
