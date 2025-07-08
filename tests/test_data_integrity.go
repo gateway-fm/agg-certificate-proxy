@@ -232,6 +232,7 @@ func runDataIntegrityTest() {
 		"--kill-switch-api-key", "test-key",
 		"--kill-restart-api-key", "test-key",
 		"--data-key", "test-data-key",
+		"--certificate-override-key", "test-certificate-override-key",
 	)
 	proxyCmd.Stdout = proxyLogFileHandle
 	proxyCmd.Stderr = proxyLogFileHandle

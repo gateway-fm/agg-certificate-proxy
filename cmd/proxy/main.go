@@ -37,6 +37,7 @@ func main() {
 	killSwitchAPIKey := flag.String("kill-switch-api-key", "", "API key for kill switch endpoint")
 	killRestartAPIKey := flag.String("kill-restart-api-key", "", "API key for restart endpoint")
 	dataKey := flag.String("data-key", "", "API key for certificate endpoints")
+	certificateOverrideKey := flag.String("certificate-override-key", "", "API key for certificate override endpoint")
 	flag.Parse()
 
 	// Create root context with cancellation
@@ -88,6 +89,15 @@ func main() {
 	}
 	if err = hashAndStoreKey(db, "data_key", *dataKey); err != nil {
 		slog.Error("failed to hash data key", "err", err)
+		return
+	}
+
+	if certificateOverrideKey == nil || len(*certificateOverrideKey) == 0 {
+		slog.Error("no certificate override key provided - cannot start")
+		return
+	}
+	if err = hashAndStoreKey(db, "certificate_override_key", *certificateOverrideKey); err != nil {
+		slog.Error("failed to hash certificate override key", "err", err)
 		return
 	}
 

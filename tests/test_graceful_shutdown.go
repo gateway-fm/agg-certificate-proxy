@@ -25,6 +25,7 @@ func runGracefulShutdownTest() {
 	killKey := "test-kill-key"
 	restartKey := "test-restart-key"
 	dataKey := "test-data-key"
+	certificateOverrideKey := "test-certificate-override-key"
 
 	// Clean up any previous test artifacts
 	os.Remove(dbPath)
@@ -46,6 +47,7 @@ func runGracefulShutdownTest() {
 		"--kill-switch-api-key", killKey,
 		"--kill-restart-api-key", restartKey,
 		"--data-key", dataKey,
+		"--certificate-override-key", certificateOverrideKey,
 		"-scheduler-interval", "3s",
 	)
 	cmd.Stdout = logFile
@@ -152,6 +154,7 @@ func runGracefulShutdownTest() {
 		"--kill-switch-api-key", killKey,
 		"--kill-restart-api-key", restartKey,
 		"--data-key", dataKey,
+		"--certificate-override-key", certificateOverrideKey,
 		"-scheduler-interval", "1s",
 	)
 	cmd2.Stdout = logFile2

@@ -40,6 +40,7 @@ func runPassthroughTest() {
 	killKey := "test-kill-key"
 	restartKey := "test-restart-key"
 	dataKey := "test-data-key"
+	certificateOverrideKey := "test-certificate-override-key"
 
 	// Start proxy with no delayed chains (all pass through)
 	fmt.Println("Step 2: Starting certificate proxy (all passthrough mode)...")
@@ -50,6 +51,7 @@ func runPassthroughTest() {
 		"--kill-switch-api-key", killKey,
 		"--kill-restart-api-key", restartKey,
 		"--data-key", dataKey,
+		"--certificate-override-key", certificateOverrideKey,
 		"--delay", "5s",
 		"--scheduler-interval", "1s",
 		"--aggsender-addr", "127.0.0.1:50052",

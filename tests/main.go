@@ -14,6 +14,7 @@ func main() {
 	metricsTest := flag.Bool("metrics", false, "Run metrics test")
 	transparentProxyTest := flag.Bool("transparent-proxy", false, "Run transparent proxy test")
 	integrityTest := flag.Bool("integrity", false, "Run integrity test")
+	overrideTest := flag.Bool("overrides", false, "Run overrides test")
 	flag.Parse()
 
 	if len(os.Args) == 1 {
@@ -24,10 +25,11 @@ func main() {
 		fmt.Println("  go run tests/*.go -kill-switch        Run kill switch test")
 		fmt.Println("  go run tests/*.go -passthrough        Run passthrough test")
 		fmt.Println("  go run tests/*.go -graceful-shutdown  Run graceful shutdown test")
-		fmt.Println("  go run tests/*.go -send           Send random certificate to local instance")
-		fmt.Println("  go run tests/*.go -metrics         Run metrics test")
-		fmt.Println("  go run tests/*.go -transparent-proxy Run transparent proxy test")
-		fmt.Println("  go run tests/*.go -integrity         Run integrity test")
+		fmt.Println("  go run tests/*.go -send               Send random certificate to local instance")
+		fmt.Println("  go run tests/*.go -metrics            Run metrics test")
+		fmt.Println("  go run tests/*.go -transparent-proxy  Run transparent proxy test")
+		fmt.Println("  go run tests/*.go -integrity          Run integrity test")
+		fmt.Println("  go run tests/*.go -overrides          Run overrides test")
 		return
 	}
 
@@ -63,6 +65,11 @@ func main() {
 
 	if *integrityTest {
 		runDataIntegrityTest()
+		return
+	}
+
+	if *overrideTest {
+		runOverridesTest()
 		return
 	}
 }

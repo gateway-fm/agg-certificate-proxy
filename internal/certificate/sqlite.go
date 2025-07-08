@@ -42,7 +42,8 @@ func (s *SqliteStore) Init() error {
 			received_at DATETIME NOT NULL,
 			processed_at DATETIME,
 			metadata TEXT,
-			cert_id TEXT
+			cert_id TEXT,
+			override_sent_at DATETIME
 		);
 	`)
 	if err != nil {
@@ -167,7 +168,7 @@ func (s *SqliteStore) GetProcessableCertificates() ([]Certificate, error) {
 	delay := time.Duration(delaySeconds) * time.Second
 	cutoff := time.Now().Add(-delay)
 
-	rows, err := s.db.Query("SELECT id, raw_proto, received_at, processed_at, metadata FROM certificates WHERE processed_at IS NULL AND received_at <= ?", cutoff)
+	rows, err := s.db.Query("SELECT id, raw_proto, received_at, processed_at, metadata FROM certificates WHERE processed_at IS NULL AND (received_at <= ? OR override_sent_at IS NOT NULL)", cutoff)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query for processable certificates: %w", err)
 	}
@@ -194,6 +195,14 @@ func (s *SqliteStore) MarkCertificateProcessed(id int64) error {
 	_, err := s.db.Exec("UPDATE certificates SET processed_at = ? WHERE id = ?", time.Now(), id)
 	if err != nil {
 		return fmt.Errorf("failed to mark certificate as processed: %w", err)
+	}
+	return nil
+}
+
+func (s *SqliteStore) MarkCertificateOverrideSent(id int64) error {
+	_, err := s.db.Exec("UPDATE certificates SET override_sent_at = ? WHERE id = ?", time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("failed to mark certificate as override sent: %w", err)
 	}
 	return nil
 }

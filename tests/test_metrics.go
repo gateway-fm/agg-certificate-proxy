@@ -39,6 +39,7 @@ func runMetricsIntegrationTest() {
 	killKey := "test-kill-key"
 	restartKey := "test-restart-key"
 	dataKey := "test-data-key"
+	certificateOverrideKey := "test-certificate-override-key"
 
 	// Start proxy
 	fmt.Println("1. Starting proxy...")
@@ -49,6 +50,7 @@ func runMetricsIntegrationTest() {
 		"--kill-switch-api-key", killKey,
 		"--kill-restart-api-key", restartKey,
 		"--data-key", dataKey,
+		"--certificate-override-key", certificateOverrideKey,
 		"--aggsender-addr", "127.0.0.1:50052",
 		"--delayed-chains", "1,2", // Only delay chains 1 and 2
 	)

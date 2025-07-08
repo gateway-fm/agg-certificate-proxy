@@ -51,6 +51,7 @@ func runKillSwitchTest() {
 	killKey := "test-kill-key"
 	restartKey := "test-restart-key"
 	dataKey := "test-data-key"
+	certificateOverrideKey := "test-certificate-override-key"
 	dbFile := "kill-switch-test.db"
 	logFile := "kill-switch-test.log"
 
@@ -111,6 +112,7 @@ func runKillSwitchTest() {
 		"--kill-switch-api-key", killKey,
 		"--kill-restart-api-key", restartKey,
 		"--data-key", dataKey,
+		"--certificate-override-key", certificateOverrideKey,
 		"--delay", "5s",
 		"--scheduler-interval", "2s",
 		"--aggsender-addr", "127.0.0.1:"+mockReceiverPort,
@@ -252,6 +254,7 @@ func runKillSwitchTest() {
 		"--kill-switch-api-key", killKey,
 		"--kill-restart-api-key", restartKey,
 		"--data-key", dataKey,
+		"--certificate-override-key", certificateOverrideKey,
 		"--delay", "5s",
 		"--scheduler-interval", "2s",
 		"--aggsender-addr", "127.0.0.1:"+mockReceiverPort,
