@@ -74,6 +74,7 @@ The proxy accepts the following command-line flags:
 - `-kill-switch-api-key`: API key for kill switch endpoint (required)
 - `-kill-restart-api-key`: API key for restart endpoint (required)
 - `-data-key`: API key for certificate endpoints (required)
+- `-certificate-override-key`: API key for overriding lockout of a certificate (will trigger sending in the next service iteration)
 
 ## Kill Switch Functionality
 

@@ -23,6 +23,7 @@ type Db interface {
 	StoreCertificate(rawProto []byte, metadata string, certId []byte) error
 	GetProcessableCertificates() ([]Certificate, error)
 	MarkCertificateProcessed(id int64) error
+	MarkCertificateOverrideSent(id int64) error
 	GetCertificates() ([]Certificate, error)
 	GetConfigValue(key string) (string, error)
 	SetConfigValue(key, value string) error

@@ -44,6 +44,7 @@ func (s *APIServer) RegisterHandlers() {
 	http.HandleFunc("/config", s.viewConfig)
 	http.HandleFunc("/kill", s.handleKillSwitch)
 	http.HandleFunc("/restart", s.handleRestart)
+	http.HandleFunc("/override", s.handleOverride)
 }
 
 // CertificateView extends Certificate with calculated fields for display
@@ -555,5 +556,57 @@ func (s *APIServer) handleRestart(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		slog.Error("encoding restart response", "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (s *APIServer) handleOverride(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	certId := r.URL.Query().Get("cert_id")
+	if certId == "" {
+		http.Error(w, "missing certificate ID", http.StatusBadRequest)
+		return
+	}
+
+	// ensure the certId is numeric
+	certIdInt, err := strconv.ParseInt(certId, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid certificate ID", http.StatusBadRequest)
+		return
+	}
+
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		http.Error(w, "missing API key", http.StatusUnauthorized)
+		return
+	}
+
+	storedKey, err := s.service.db.GetCredential("certificate_override_key")
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(storedKey), []byte(key))
+	if err != nil {
+		http.Error(w, "Invalid API key", http.StatusUnauthorized)
+		return
+	}
+
+	err = s.service.db.MarkCertificateOverrideSent(certIdInt)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]string{
+		"status": "override sent",
+	}); err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 }

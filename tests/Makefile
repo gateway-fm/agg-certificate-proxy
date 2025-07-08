@@ -49,8 +49,13 @@ integrity: build-proxy ## Run integrity test
 	@echo "Running integrity test..."
 	@go run . -integrity
 
+.PHONY: overrides
+overrides: build-proxy ## Run overrides test
+	@echo "Running overrides test..."
+	@go run . -overrides
+
 .PHONY: all
-all: kill-switch passthrough graceful-shutdown metrics transparent-proxy-e2e integrity ## Run all tests
+all: kill-switch passthrough graceful-shutdown metrics transparent-proxy-e2e integrity overrides ## Run all tests
 
 .PHONY: clean
 clean: ## Clean up test artifacts
