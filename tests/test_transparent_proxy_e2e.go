@@ -123,6 +123,9 @@ func runTransparentProxyE2ETest() {
 
 	// Cleanup
 	defer func() {
+		fmt.Println("Cleaning up any existing processes...")
+		exec.Command("pkill", "-f", "mock_receiver").Run()
+		exec.Command("pkill", "-f", "proxy").Run()
 		os.Remove(dbFile)
 		os.Remove(logFile)
 	}()
@@ -299,9 +302,9 @@ func runTransparentProxyE2ETest() {
 	fmt.Println("\n==== Test 6: Certificate Delay Verification ====")
 	submissionCount := backend.callCounts["SubmitCertificate"]
 	if submissionCount == 0 {
-		fmt.Println("✅ Certificate not sent immediately (correctly delayed)")
+		fmt.Println("✅ Test 6 - certificate not sent immediately (correctly delayed)")
 	} else {
-		fmt.Println("❌ Certificate was sent immediately (should be delayed)")
+		fmt.Println("❌ Test 6 - certificate was sent immediately (should be delayed)")
 	}
 
 	// Wait for delay period
@@ -311,9 +314,9 @@ func runTransparentProxyE2ETest() {
 	// Check if certificate was eventually sent
 	submissionCount = backend.callCounts["SubmitCertificate"]
 	if submissionCount == 1 {
-		fmt.Println("✅ Delayed certificate was sent after delay period")
+		fmt.Println("✅ Test 6 - delayed certificate was sent after delay period")
 	} else {
-		fmt.Println("❌ Delayed certificate was not sent")
+		fmt.Println("❌ Test 6 - delayed certificate was not sent")
 	}
 
 	// Test 7: Non-delayed certificate submission
@@ -343,18 +346,18 @@ func runTransparentProxyE2ETest() {
 		},
 	})
 	if err != nil {
-		fmt.Printf("❌ Non-delayed certificate submission failed: %v\n", err)
+		fmt.Printf("❌ Test 7 - submission failed: %v\n", err)
 	} else {
-		fmt.Println("✅ Non-delayed certificate submission succeeded")
+		fmt.Println("✅ Test 7 - submission succeeded")
 	}
 
 	// Should be sent immediately
 	time.Sleep(500 * time.Millisecond)
 	submissionCount = backend.callCounts["SubmitCertificate"]
 	if submissionCount == 2 {
-		fmt.Println("✅ Non-delayed certificate was sent immediately")
+		fmt.Println("✅ Test 7 - was sent immediately")
 	} else {
-		fmt.Println("❌ Non-delayed certificate was not sent immediately")
+		fmt.Println("❌ Test 7 - was not sent immediately")
 	}
 
 	// Test 8: Non-delayed certificate submission - certificate configured for pausing but with no withdrawals
@@ -385,18 +388,93 @@ func runTransparentProxyE2ETest() {
 		},
 	})
 	if err != nil {
-		fmt.Printf("❌ Delayed network - Certificate no withdrawals - submission failed: %v\n", err)
+		fmt.Printf("❌ Test 8 - submission failed: %v\n", err)
 	} else {
-		fmt.Println("✅ Delayed network - Certificate no withdrawals - submission succeeded")
+		fmt.Println("✅ Test 8 - submission succeeded")
 	}
 
 	// Should be sent immediately
 	time.Sleep(500 * time.Millisecond)
 	submissionCount = backend.callCounts["SubmitCertificate"]
 	if submissionCount == 3 {
-		fmt.Println("✅ Delayed network - Certificate no withdrawals - was sent immediately")
+		fmt.Println("✅ Test 8 - was sent immediately")
 	} else {
-		fmt.Println("❌ Delayed network - Certificate no withdrawals - was not sent immediately")
+		fmt.Println("❌ Test 8 - was not sent immediately")
+	}
+
+	fmt.Println("\n==== Test 9: Delayed network - Certificate with withdrawals (header request returns pending status) ====")
+	test9Response, err := certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
+		Certificate: &typesv1.Certificate{
+			NetworkId: 1, // is in delayed list
+			Height:    200,
+			// only bridges in - no bridge exits
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
+			BridgeExits: []*interopv1.BridgeExit{
+				{
+					TokenInfo: &interopv1.TokenInfo{
+						OriginNetwork:      1,
+						OriginTokenAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+					},
+					DestNetwork: 1,
+					DestAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+					Amount:      &interopv1.FixedBytes32{Value: []byte("1000000000000000000")},
+					Metadata:    &interopv1.FixedBytes32{Value: []byte("0x1234567890123456789012345678901234567890")},
+				},
+			},
+			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: []byte("prev2")},
+			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: []byte("new2")},
+			Metadata:          &interopv1.FixedBytes32{Value: nil},
+		},
+	})
+	if err != nil {
+		fmt.Printf("❌ Test 9 - submission failed: %v\n", err)
+	} else {
+		fmt.Println("✅ Test 9 - submission succeeded")
+	}
+
+	// Should be locked as expected
+	time.Sleep(500 * time.Millisecond)
+	submissionCount = backend.callCounts["SubmitCertificate"]
+	if submissionCount == 3 {
+		fmt.Println("✅ Test 9 - was locked as expected")
+	} else {
+		fmt.Println("❌ Test 9 - was sent immediately")
+	}
+
+	// now quickly request the certificate header to ensure it is returned by our service intercepting
+	headerResp, err = nodeStateClient.GetCertificateHeader(ctx, &v1.GetCertificateHeaderRequest{
+		CertificateId: &typesv1.CertificateId{
+			Value: test9Response.CertificateId.Value,
+		},
+	})
+	if err != nil {
+		fmt.Printf("❌ Test 9 - failed to get certificate header: %v\n", err)
+	} else {
+		fmt.Println("✅ Test 9 - got certificate header")
+	}
+	if headerResp.CertificateHeader.Status != typesv1.CertificateStatus_CERTIFICATE_STATUS_PENDING {
+		fmt.Println("❌ Test 9 - certificate header status is not pending")
+	} else {
+		fmt.Println("✅ Test 9 - certificate header status is pending")
+	}
+
+	// now wait a little longer for the certificate to be processed and passed on
+	// then make the request again and we should get our canned response of settled
+	time.Sleep(3 * time.Second)
+	headerResp, err = nodeStateClient.GetCertificateHeader(ctx, &v1.GetCertificateHeaderRequest{
+		CertificateId: &typesv1.CertificateId{
+			Value: test9Response.CertificateId.Value,
+		},
+	})
+	if err != nil {
+		fmt.Printf("❌ Test 9 - failed to get certificate header: %v\n", err)
+	} else {
+		fmt.Println("✅ Test 9 - got certificate header")
+	}
+	if headerResp.CertificateHeader.Status != typesv1.CertificateStatus_CERTIFICATE_STATUS_SETTLED {
+		fmt.Println("❌ Test 9 - certificate header status is not settled")
+	} else {
+		fmt.Println("✅ Test 9 - certificate header status is settled")
 	}
 
 	// Final summary
@@ -408,8 +486,8 @@ func runTransparentProxyE2ETest() {
 	fmt.Printf("  GetEpochConfiguration: %d\n", backend.callCounts["GetEpochConfiguration"])
 
 	// Check if all tests passed
-	allPassed := backend.callCounts["SubmitCertificate"] == 3 &&
-		backend.callCounts["GetCertificateHeader"] == 1 &&
+	allPassed := backend.callCounts["SubmitCertificate"] == 4 &&
+		backend.callCounts["GetCertificateHeader"] == 2 &&
 		backend.callCounts["GetLatestCertificateHeader"] == 2 &&
 		backend.callCounts["GetEpochConfiguration"] == 1
 
