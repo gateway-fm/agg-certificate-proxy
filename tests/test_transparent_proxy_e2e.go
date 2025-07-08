@@ -192,11 +192,23 @@ func runTransparentProxyE2ETest() {
 	ctx := context.Background()
 
 	// Test 1: Certificate submission should be intercepted
-	fmt.Println("\n==== Test 1: Certificate Submission (intercepted) ====")
+	fmt.Println("\n==== Test 1: Certificate Submission with withdrawal (intercepted) ====")
 	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
 		Certificate: &typesv1.Certificate{
-			NetworkId:         1, // Delayed chain
-			Height:            100,
+			NetworkId: 1, // Delayed chain
+			Height:    100,
+			BridgeExits: []*interopv1.BridgeExit{
+				{
+					TokenInfo: &interopv1.TokenInfo{
+						OriginNetwork:      1,
+						OriginTokenAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+					},
+					DestNetwork: 1,
+					DestAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+					Amount:      &interopv1.FixedBytes32{Value: []byte("1000000000000000000")},
+					Metadata:    &interopv1.FixedBytes32{Value: []byte("metadata")},
+				},
+			},
 			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: []byte("prev")},
 			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: []byte("new")},
 		},
@@ -297,11 +309,25 @@ func runTransparentProxyE2ETest() {
 	}
 
 	// Test 7: Non-delayed certificate submission
-	fmt.Println("\n==== Test 7: Non-delayed Certificate (immediate forward) ====")
+	fmt.Println("\n==== Test 7: Non-delayed Certificate only imports (immediate forward) ====")
 	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
 		Certificate: &typesv1.Certificate{
-			NetworkId:         999, // Not in delayed list
-			Height:            200,
+			NetworkId: 999, // Not in delayed list
+			Height:    200,
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{
+				{
+					BridgeExit: &interopv1.BridgeExit{
+						TokenInfo: &interopv1.TokenInfo{
+							OriginNetwork:      1,
+							OriginTokenAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+						},
+						DestNetwork: 1,
+						DestAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+						Amount:      &interopv1.FixedBytes32{Value: []byte("1000000000000000000")},
+						Metadata:    &interopv1.FixedBytes32{Value: []byte("metadata")},
+					},
+				},
+			},
 			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: []byte("prev2")},
 			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: []byte("new2")},
 		},
@@ -321,16 +347,56 @@ func runTransparentProxyE2ETest() {
 		fmt.Println("❌ Non-delayed certificate was not sent immediately")
 	}
 
+	// Test 8: Non-delayed certificate submission - certificate configured for pausing but with no withdrawals
+	fmt.Println("\n==== Test 8: Delayed network - Certificate no withdrawals (immediate forward) ====")
+	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
+		Certificate: &typesv1.Certificate{
+			NetworkId: 1, // is in delayed list
+			Height:    200,
+			// only bridges in - no bridge exits
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{
+				{
+					BridgeExit: &interopv1.BridgeExit{
+						TokenInfo: &interopv1.TokenInfo{
+							OriginNetwork:      1,
+							OriginTokenAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+						},
+						DestNetwork: 1,
+						DestAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
+						Amount:      &interopv1.FixedBytes32{Value: []byte("1000000000000000000")},
+						Metadata:    &interopv1.FixedBytes32{Value: []byte("metadata")},
+					},
+				},
+			},
+			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: []byte("prev2")},
+			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: []byte("new2")},
+		},
+	})
+	if err != nil {
+		fmt.Printf("❌ Delayed network - Certificate no withdrawals - submission failed: %v\n", err)
+	} else {
+		fmt.Println("✅ Delayed network - Certificate no withdrawals - submission succeeded")
+	}
+
+	// Should be sent immediately
+	time.Sleep(500 * time.Millisecond)
+	submissionCount = backend.callCounts["SubmitCertificate"]
+	if submissionCount == 3 {
+		fmt.Println("✅ Delayed network - Certificate no withdrawals - was sent immediately")
+	} else {
+		fmt.Println("❌ Delayed network - Certificate no withdrawals - was not sent immediately")
+	}
+
 	// Final summary
 	fmt.Println("\n==== Final Summary ====")
 	fmt.Printf("Backend call counts:\n")
-	fmt.Printf("  SubmitCertificate: %d (should be 0)\n", backend.callCounts["SubmitCertificate"])
+	fmt.Printf("  SubmitCertificate: %d\n", backend.callCounts["SubmitCertificate"])
 	fmt.Printf("  GetCertificateHeader: %d\n", backend.callCounts["GetCertificateHeader"])
 	fmt.Printf("  GetLatestCertificateHeader: %d\n", backend.callCounts["GetLatestCertificateHeader"])
 	fmt.Printf("  GetEpochConfiguration: %d\n", backend.callCounts["GetEpochConfiguration"])
 
 	// Check if all tests passed
-	allPassed := backend.callCounts["SubmitCertificate"] == 2 &&
+	allPassed := backend.callCounts["SubmitCertificate"] == 3 &&
 		backend.callCounts["GetCertificateHeader"] == 1 &&
 		backend.callCounts["GetLatestCertificateHeader"] == 2 &&
 		backend.callCounts["GetEpochConfiguration"] == 1
