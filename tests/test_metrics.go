@@ -240,8 +240,10 @@ func submitMetricsTestCertificate(proxyAddr string, networkID uint32, amount uin
 					Amount:      &interopv1.FixedBytes32{Value: amountBytes},
 				},
 			},
-			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: make([]byte, 32)},
-			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: make([]byte, 32)},
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
+			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: make([]byte, 32)},
+			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: make([]byte, 32)},
+			Metadata:            &interopv1.FixedBytes32{Value: nil},
 		},
 	}
 

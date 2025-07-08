@@ -395,21 +395,28 @@ func submitTestCertificate(proxyAddr string, networkID uint32, height, withdrawa
 	// Create simple test certificate
 	req := &v1.SubmitCertificateRequest{
 		Certificate: &typesv1.Certificate{
-			NetworkId:         networkID,
-			Height:            height,
-			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: make([]byte, 32)},
-			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: make([]byte, 32)},
+			NetworkId:           networkID,
+			Height:              height,
+			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: make([]byte, 32)},
+			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: make([]byte, 32)},
+			BridgeExits:         []*interopv1.BridgeExit{},
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
+			Metadata:            &interopv1.FixedBytes32{Value: nil},
 		},
 	}
 
 	if withdrawalValue > 0 {
 		req.Certificate.BridgeExits = []*interopv1.BridgeExit{
 			{
+				LeafType:    interopv1.LeafType_LEAF_TYPE_TRANSFER,
+				DestNetwork: 0,
+				DestAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
 				TokenInfo: &interopv1.TokenInfo{
 					OriginNetwork:      1,
 					OriginTokenAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
 				},
-				Amount: &interopv1.FixedBytes32{Value: uint64ToBytes(withdrawalValue)},
+				Amount:   &interopv1.FixedBytes32{Value: uint64ToBytes(withdrawalValue)},
+				Metadata: &interopv1.FixedBytes32{Value: nil},
 			},
 		}
 	}

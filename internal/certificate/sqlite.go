@@ -41,7 +41,8 @@ func (s *SqliteStore) Init() error {
 			raw_proto BLOB NOT NULL,
 			received_at DATETIME NOT NULL,
 			processed_at DATETIME,
-			metadata TEXT
+			metadata TEXT,
+			cert_id TEXT
 		);
 	`)
 	if err != nil {
@@ -144,10 +145,10 @@ func (s *SqliteStore) Close() error {
 }
 
 // StoreCertificate stores a new certificate
-func (s *SqliteStore) StoreCertificate(rawProto []byte, metadata string) error {
+func (s *SqliteStore) StoreCertificate(rawProto []byte, metadata string, certId []byte) error {
 	_, err := s.db.Exec(
-		"INSERT INTO certificates (raw_proto, received_at, metadata) VALUES (?, ?, ?)",
-		rawProto, time.Now(), metadata,
+		"INSERT INTO certificates (raw_proto, received_at, metadata, cert_id) VALUES (?, ?, ?, ?)",
+		rawProto, time.Now(), metadata, certId,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to store certificate: %w", err)
@@ -342,4 +343,13 @@ func (s *SqliteStore) GetUnprocessedCertificates() ([]Certificate, error) {
 	}
 
 	return certs, nil
+}
+
+func (s *SqliteStore) GetCertificateById(id []byte) (Certificate, error) {
+	var cert Certificate
+	err := s.db.QueryRow("SELECT id, raw_proto, received_at, processed_at, metadata FROM certificates WHERE cert_id = ?", id).Scan(&cert.ID, &cert.RawProto, &cert.ReceivedAt, &cert.ProcessedAt, &cert.Metadata)
+	if err != nil {
+		return Certificate{}, fmt.Errorf("failed to get certificate by id: %w", err)
+	}
+	return cert, nil
 }

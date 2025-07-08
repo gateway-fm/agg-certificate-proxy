@@ -191,7 +191,7 @@ func main() {
 
 	// Create and register gRPC server
 	grpcServer := grpc.NewServer(grpcOpts...)
-	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater)
+	certGrpcServer := certificate.NewGRPCServer(certificateService, metricsUpdater, *aggsenderAddr)
 	certGrpcServer.Register(grpcServer)
 
 	// Start gRPC server in goroutine

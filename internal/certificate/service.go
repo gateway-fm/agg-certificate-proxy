@@ -20,7 +20,7 @@ import (
 type Db interface {
 	Init() error
 	Close() error
-	StoreCertificate(rawProto []byte, metadata string) error
+	StoreCertificate(rawProto []byte, metadata string, certId []byte) error
 	GetProcessableCertificates() ([]Certificate, error)
 	MarkCertificateProcessed(id int64) error
 	GetCertificates() ([]Certificate, error)
@@ -34,6 +34,7 @@ type Db interface {
 	GetRecentKillSwitchAttempts(attemptType string, duration time.Duration) (int, error)
 	CleanupOldKillSwitchAttempts(olderThan time.Duration) error
 	GetUnprocessedCertificates() ([]Certificate, error)
+	GetCertificateById(id []byte) (Certificate, error)
 }
 
 // Service handles the business logic for certificates.
@@ -47,8 +48,8 @@ func NewService(db Db) *Service {
 }
 
 // StoreCertificate stores a certificate for delayed processing.
-func (s *Service) StoreCertificate(rawProto []byte, metadata string) error {
-	return s.db.StoreCertificate(rawProto, metadata)
+func (s *Service) StoreCertificate(rawProto []byte, metadata string, certId []byte) error {
+	return s.db.StoreCertificate(rawProto, metadata, certId)
 }
 
 // GetCertificates retrieves all certificates.
