@@ -139,7 +139,7 @@ func (s *Service) ProcessPendingCertificates(ctx context.Context) {
 		default:
 		}
 
-		if err := s.SendToAggSender(cert); err != nil {
+		if _, err := s.SendToAggSender(cert); err != nil {
 			slog.Error("error sending certificate to agg sender", "certificate", cert.ID, "err", err)
 			continue
 		}
@@ -151,7 +151,7 @@ func (s *Service) ProcessPendingCertificates(ctx context.Context) {
 }
 
 // SendToAggSender sends a certificate to the agg sender.
-func (s *Service) SendToAggSender(cert Certificate) error {
+func (s *Service) SendToAggSender(cert Certificate) (*v1.SubmitCertificateResponse, error) {
 	if cert.ID == 0 {
 		slog.Info("sending immediate certificate to aggsender...")
 	} else {
@@ -171,7 +171,7 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 
 	conn, err := grpc.NewClient(aggSenderAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return fmt.Errorf("failed to connect to aggsender at %s: %v", aggSenderAddr, err)
+		return nil, fmt.Errorf("failed to connect to aggsender at %s: %v", aggSenderAddr, err)
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
@@ -185,7 +185,7 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 	// Unmarshal the certificate
 	var reqProto v1.SubmitCertificateRequest
 	if err := proto.Unmarshal(cert.RawProto, &reqProto); err != nil {
-		return fmt.Errorf("failed to unmarshal certificate: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal certificate: %v", err)
 	}
 
 	// Send the certificate
@@ -197,7 +197,7 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 
 	resp, err := client.SubmitCertificate(ctx, &reqProto)
 	if err != nil {
-		return fmt.Errorf("failed to submit certificate to aggsender: %v", err)
+		return nil, fmt.Errorf("failed to submit certificate to aggsender: %v", err)
 	}
 
 	if resp.CertificateId != nil && resp.CertificateId.Value != nil {
@@ -214,7 +214,7 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 		}
 	}
 
-	return nil
+	return resp, nil
 }
 
 func (s *Service) GetUnprocessedCertificates() ([]Certificate, error) {
