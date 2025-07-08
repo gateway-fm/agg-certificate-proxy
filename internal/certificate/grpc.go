@@ -10,7 +10,6 @@ import (
 
 	"log/slog"
 
-	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	nodev1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
 )
@@ -70,15 +69,12 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 	// we only lock away certificates that have a withdrawal value if it is just imports then we allow them to go through
 	if isDelayed && withdrawalValue > 0 {
 		slog.Info("network is on the delay list. storing certificate for delayed processing.", "network", networkID)
-		if err := s.service.StoreCertificate(rawProto, string(metadataJson)); err != nil {
+		certId := generateCertificateId(req.Certificate)
+		if err := s.service.StoreCertificate(rawProto, string(metadataJson), certId.Value.Value); err != nil {
 			return nil, fmt.Errorf("failed to store certificate: %w", err)
 		}
 		resp = &nodev1.SubmitCertificateResponse{
-			CertificateId: &typesv1.CertificateId{
-				Value: &interopv1.FixedBytes32{
-					Value: []byte("certificate-processed-id"), // Dummy ID
-				},
-			},
+			CertificateId: certId,
 		}
 	} else {
 		slog.Info("sending certificate straight through.", "network", networkID)

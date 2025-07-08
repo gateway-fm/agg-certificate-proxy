@@ -3,6 +3,7 @@ module github.com/gateway-fm/agg-certificate-proxy
 go 1.24.0
 
 require (
+	github.com/ethereum/go-ethereum v1.16.1
 	github.com/go-co-op/gocron/v2 v2.16.2
 	github.com/prometheus/client_golang v1.22.0
 	golang.org/x/crypto v0.36.0
@@ -16,7 +17,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ethereum/go-ethereum v1.16.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect

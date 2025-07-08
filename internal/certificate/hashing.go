@@ -10,17 +10,19 @@ import (
 )
 
 func generateCertificateId(cert *typesv1.Certificate) *typesv1.CertificateId {
-	var combinedExits []byte
+	var combinedExits [][]byte
 	for _, bridgeExit := range cert.GetBridgeExits() {
-		combinedExits = append(combinedExits, hashBridgeExit(bridgeExit)...)
+		hash := hashBridgeExit(bridgeExit)
+		combinedExits = append(combinedExits, hash)
 	}
-	hashedCombinedExits := crypto.Keccak256Hash(combinedExits).Bytes()
+	hashedCombinedExits := crypto.Keccak256Hash(combinedExits...).Bytes()
 
-	var importedBridgeExits []byte
+	var importedBridgeExits [][]byte
 	for _, importedBridgeExit := range cert.GetImportedBridgeExits() {
-		importedBridgeExits = append(importedBridgeExits, hashImportedBridgeExit(importedBridgeExit)...)
+		hash := hashImportedBridgeExit(importedBridgeExit)
+		importedBridgeExits = append(importedBridgeExits, hash)
 	}
-	hashedImportedBridgeExits := crypto.Keccak256Hash(importedBridgeExits).Bytes()
+	hashedImportedBridgeExits := crypto.Keccak256Hash(importedBridgeExits...).Bytes()
 
 	networkIdBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(networkIdBytes, cert.NetworkId)
@@ -51,7 +53,11 @@ func hashBridgeExit(b *interopv1.BridgeExit) []byte {
 	var data []byte
 
 	// 1. leaf_type as single byte
-	data = append(data, byte(b.LeafType))
+	if b.LeafType == interopv1.LeafType_LEAF_TYPE_TRANSFER {
+		data = append(data, byte(0))
+	} else {
+		data = append(data, byte(1))
+	}
 
 	// 2. origin_network as 4 bytes big-endian
 	originNetworkBytes := make([]byte, 4)
@@ -70,7 +76,15 @@ func hashBridgeExit(b *interopv1.BridgeExit) []byte {
 	data = append(data, b.DestAddress.Value...)
 
 	// 6. amount as 32 bytes big-endian
-	data = append(data, b.Amount.Value...)
+	amountBytes := make([]byte, 32)
+	// Copy the big endian bytes to the right side of the 32-byte array (left-padded with zeros)
+	if len(b.Amount.Value) <= 32 {
+		copy(amountBytes[32-len(b.Amount.Value):], b.Amount.Value)
+	} else {
+		// If longer than 32 bytes, take the rightmost 32 bytes
+		copy(amountBytes, b.Amount.Value[len(b.Amount.Value)-32:])
+	}
+	data = append(data, amountBytes...)
 
 	// 7. metadata hash as 32 bytes (or EMPTY_METADATA_HASH if nil)
 	if b.Metadata != nil {
@@ -91,28 +105,26 @@ func hashImportedBridgeExit(b *interopv1.ImportedBridgeExit) []byte {
 	if b.GetMainnet() != nil {
 		m := b.GetMainnet()
 
-		var leafMer []byte
-		leafMer = append(leafMer, m.ProofLeafMer.Root.Value...)
+		combinedSiblings := make([]byte, 0, len(m.ProofLeafMer.Siblings)*32)
 		for _, leaf := range m.ProofLeafMer.Siblings {
-			leafMer = append(leafMer, leaf.Value...)
+			combinedSiblings = append(combinedSiblings, leaf.Value...)
 		}
-		leafMerHash := crypto.Keccak256Hash(leafMer).Bytes()
+		leafMerHash := crypto.Keccak256Hash(m.ProofLeafMer.Root.Value, combinedSiblings).Bytes()
 
-		var proofGerL1Root []byte
-		proofGerL1Root = append(proofGerL1Root, m.ProofGerL1Root.Root.Value...)
+		combinedSiblings = make([]byte, 0, len(m.ProofGerL1Root.Siblings)*32)
 		for _, leaf := range m.ProofGerL1Root.Siblings {
-			proofGerL1Root = append(proofGerL1Root, leaf.Value...)
+			combinedSiblings = append(combinedSiblings, leaf.Value...)
 		}
-		proofGerL1RootHash := crypto.Keccak256Hash(proofGerL1Root).Bytes()
+		proofGerL1RootHash := crypto.Keccak256Hash(m.ProofGerL1Root.Root.Value, combinedSiblings).Bytes()
 
-		var l1Leaf []byte
-		gerBytes := append(m.L1Leaf.Mer.Value, m.L1Leaf.Rer.Value...)
-		gerHash := crypto.Keccak256Hash(gerBytes).Bytes()
-		l1Leaf = append(l1Leaf, gerHash...)
-		l1Leaf = append(l1Leaf, m.L1Leaf.Inner.BlockHash.Value...)
-		l1Leaf = append(l1Leaf, uint64ToBytes(m.L1Leaf.Inner.Timestamp)...)
+		gerHash := crypto.Keccak256Hash(m.L1Leaf.Mer.Value, m.L1Leaf.Rer.Value).Bytes()
+		l1LeafHash := crypto.Keccak256Hash(
+			gerHash,
+			m.L1Leaf.Inner.BlockHash.Value,
+			uint64ToBytes(m.L1Leaf.Inner.Timestamp),
+		).Bytes()
 
-		mainnetHash := crypto.Keccak256Hash(leafMerHash, proofGerL1RootHash, l1Leaf).Bytes()
+		mainnetHash := crypto.Keccak256Hash(leafMerHash, proofGerL1RootHash, l1LeafHash).Bytes()
 		claimToHash = append(claimToHash, mainnetHash...)
 	} else if b.GetRollup() != nil {
 		r := b.GetRollup()
@@ -151,10 +163,7 @@ func hashImportedBridgeExit(b *interopv1.ImportedBridgeExit) []byte {
 
 	data = append(data, claimToHash...)
 
-	var globalIndex []byte
-	globalIndex = append(globalIndex, b.GlobalIndex.Value...)
-	globalIndexHash := crypto.Keccak256Hash(globalIndex).Bytes()
-	data = append(data, globalIndexHash...)
+	data = append(data, b.GlobalIndex.Value...)
 
 	return crypto.Keccak256Hash(data).Bytes()
 }

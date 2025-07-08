@@ -42,6 +42,7 @@ func (s *SqliteStore) Init() error {
 			received_at DATETIME NOT NULL,
 			processed_at DATETIME,
 			metadata TEXT
+			cert_id TEXT
 		);
 	`)
 	if err != nil {
@@ -144,10 +145,10 @@ func (s *SqliteStore) Close() error {
 }
 
 // StoreCertificate stores a new certificate
-func (s *SqliteStore) StoreCertificate(rawProto []byte, metadata string) error {
+func (s *SqliteStore) StoreCertificate(rawProto []byte, metadata string, certId []byte) error {
 	_, err := s.db.Exec(
-		"INSERT INTO certificates (raw_proto, received_at, metadata) VALUES (?, ?, ?)",
-		rawProto, time.Now(), metadata,
+		"INSERT INTO certificates (raw_proto, received_at, metadata, cert_id) VALUES (?, ?, ?, ?)",
+		rawProto, time.Now(), metadata, certId,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to store certificate: %w", err)
