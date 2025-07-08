@@ -20,7 +20,7 @@ func ParseTokenValues(tokenValues string) (map[string]TokenValue, error) {
 			return nil, fmt.Errorf("invalid token value: %s", tokenValue)
 		}
 		address := parts[0]
-		if len(address) != 42 {
+		if len(address) != 40 {
 			return nil, fmt.Errorf("invalid address: %s", address)
 		}
 		value, err := strconv.ParseUint(parts[1], 10, 64)

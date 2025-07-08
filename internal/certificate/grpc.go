@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -172,18 +173,21 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 		if address == nil {
 			continue
 		}
-		asHex := common.BytesToAddress(address.Value).String()
+		asHex := common.BytesToAddress(address.Value).Hex()
 		amount := bridgeExit.GetAmount().GetValue()
 		asUint := bytesToUint64(amount)
+		asHex = strings.TrimPrefix(asHex, "0x")
 		tokenDetail, ok := parsedTokenValues[asHex]
 		if !ok {
-			slog.Warn("token address not found in config", "address", address)
+			slog.Warn("token address not found in config", "address", asHex)
 			return true, nil // no error here but we need to lock the certificate
 		}
 		totalValue += asUint * tokenDetail.DollarValue
 	}
 
-	return totalValue <= susLimit, nil
+	slog.Info("suspicious calcs", "value", totalValue, "limit", susLimit)
+
+	return totalValue > susLimit, nil
 }
 
 // Register registers the gRPC service.

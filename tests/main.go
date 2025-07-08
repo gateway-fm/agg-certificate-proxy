@@ -15,6 +15,7 @@ func main() {
 	transparentProxyTest := flag.Bool("transparent-proxy", false, "Run transparent proxy test")
 	integrityTest := flag.Bool("integrity", false, "Run integrity test")
 	overrideTest := flag.Bool("overrides", false, "Run overrides test")
+	suspiciousTest := flag.Bool("suspicious", false, "Run suspicious test")
 	flag.Parse()
 
 	if len(os.Args) == 1 {
@@ -30,6 +31,7 @@ func main() {
 		fmt.Println("  go run tests/*.go -transparent-proxy  Run transparent proxy test")
 		fmt.Println("  go run tests/*.go -integrity          Run integrity test")
 		fmt.Println("  go run tests/*.go -overrides          Run overrides test")
+		fmt.Println("  go run tests/*.go -suspicious         Run suspicious test")
 		return
 	}
 
@@ -70,6 +72,11 @@ func main() {
 
 	if *overrideTest {
 		runOverridesTest()
+		return
+	}
+
+	if *suspiciousTest {
+		runSuspiciousTest()
 		return
 	}
 }
