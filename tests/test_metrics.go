@@ -36,6 +36,12 @@ func runMetricsIntegrationTest() {
 	os.Remove("metrics-test.db")
 	os.Remove("metrics-test.log")
 
+	defer func() {
+		os.Remove("metrics-test.db")
+		os.Remove("metrics-test.log")
+		os.Remove("mock-receiver.log")
+	}()
+
 	killKey := "test-kill-key"
 	restartKey := "test-restart-key"
 	dataKey := "test-data-key"

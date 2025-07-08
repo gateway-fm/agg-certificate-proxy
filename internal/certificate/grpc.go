@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -13,6 +14,7 @@ import (
 
 	"log/slog"
 
+	"github.com/ethereum/go-ethereum/common"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	nodev1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
 	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
@@ -76,29 +78,112 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 
 	slog.Info("withdrawal value", "value", withdrawalValue)
 
-	// we only lock away certificates that have a withdrawal value if it is just imports then we allow them to go through
-	if isDelayed && withdrawalValue > 0 {
-		slog.Info("network is on the delay list. storing certificate for delayed processing.", "network", networkID)
-		certId := generateCertificateId(req.Certificate)
-		if err := s.service.StoreCertificate(rawProto, string(metadataJson), certId.Value.Value); err != nil {
-			return nil, fmt.Errorf("failed to store certificate: %w", err)
-		}
-		resp = &nodev1.SubmitCertificateResponse{
-			CertificateId: certId,
-		}
-	} else {
-		slog.Info("sending certificate straight through.", "network", networkID)
+	if !isDelayed {
 		// Send immediately
-		cert := Certificate{ID: 0, RawProto: rawProto, Metadata: string(metadataJson)}
-		resp, err = s.service.SendToAggSender(cert)
-		if err != nil {
-			slog.Error("failed to send certificate immediately", "err", err)
-			return nil, fmt.Errorf("failed to send certificate immediately: %w", err)
-		}
+		resp, err = s.sendCertificateImmediately(rawProto, string(metadataJson))
 		slog.Info("successfully sent certificate for network immediately", "network", networkID)
+	} else {
+		if withdrawalValue == 0 {
+			resp, err = s.sendCertificateImmediately(rawProto, string(metadataJson))
+			slog.Info("successfully sent certificate for network immediately", "network", networkID)
+		} else {
+			isSuspicious, err := s.checkForSuspiciousValue(req)
+			if err != nil {
+				slog.Error("failed to check for suspicious value", "err", err)
+				return nil, fmt.Errorf("failed to check for suspicious value: %w", err)
+			}
+			if isSuspicious {
+				slog.Info("certificate is suspicious, locking certificate", "network", networkID)
+				resp, err = s.storeCertificate(rawProto, string(metadataJson), req.Certificate)
+			} else {
+				slog.Info("certificate doesn't appear to be suspicious, sending immediately", "network", networkID)
+				resp, err = s.sendCertificateImmediately(rawProto, string(metadataJson))
+			}
+		}
 	}
 
 	return resp, nil
+}
+
+func (s *GRPCServer) sendCertificateImmediately(rawProto []byte, metadataJson string) (*nodev1.SubmitCertificateResponse, error) {
+	cert := Certificate{ID: 0, RawProto: rawProto, Metadata: string(metadataJson)}
+	resp, err := s.service.SendToAggSender(cert)
+	if err != nil {
+		slog.Error("failed to send certificate immediately", "err", err)
+		return nil, fmt.Errorf("failed to send certificate immediately: %w", err)
+	}
+	return resp, err
+}
+
+func (s *GRPCServer) storeCertificate(rawProto []byte, metadataJson string, certificate *typesv1.Certificate) (*nodev1.SubmitCertificateResponse, error) {
+	certId := generateCertificateId(certificate)
+	if err := s.service.StoreCertificate(rawProto, string(metadataJson), certId.Value.Value); err != nil {
+		return nil, fmt.Errorf("failed to store certificate: %w", err)
+	}
+	return &nodev1.SubmitCertificateResponse{
+		CertificateId: certId,
+	}, nil
+}
+
+// checkForSuspiciousValue will use the config passed at app startup to determine a dollar value for tokens
+// in the certificate.  If it goes over the configured threshold then we will return true and lock the certificate
+// likewise if we encounter a token address that is not in the config we will return true to lock the certificate
+func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateRequest) (bool, error) {
+	// now lets total up the values of the tokens based on the config
+	suspiciousValue, err := s.service.db.GetConfigValue("suspicious_value")
+	if err != nil {
+		slog.Error("failed to get suspicious value", "err", err)
+		return true, err
+	} else {
+		slog.Info("suspicious value", "value", suspiciousValue)
+	}
+	var susLimit uint64
+	if suspiciousValue != "" {
+		susLimit, err = strconv.ParseUint(suspiciousValue, 10, 64)
+		if err != nil {
+			slog.Error("failed to parse suspicious value", "err", err)
+			return true, err
+		}
+	}
+
+	tokenValues, err := s.service.db.GetConfigValue("token_values")
+	if err != nil {
+		slog.Error("failed to get token values", "err", err)
+		return true, err
+	} else {
+		slog.Info("token values", "value", tokenValues)
+	}
+
+	if len(suspiciousValue) == 0 && len(tokenValues) == 0 {
+		slog.Info("no suspicious token config found, treating as suspicious")
+		return true, nil
+	}
+
+	parsedTokenValues, err := ParseTokenValues(tokenValues)
+	if err != nil {
+		slog.Error("failed to parse token values", "err", err)
+		return true, err
+	}
+
+	totalValue := uint64(0)
+
+	for _, bridgeExit := range req.Certificate.GetBridgeExits() {
+		address := bridgeExit.GetTokenInfo().GetOriginTokenAddress()
+		if address == nil {
+			continue
+		}
+		asHex := common.BytesToAddress(address.Value).String()
+		amount := bridgeExit.GetAmount().GetValue()
+		asUint := bytesToUint64(amount)
+		tokenDetail, ok := parsedTokenValues[asHex]
+		if !ok {
+			slog.Warn("token address not found in config", "address", address)
+			return true, nil // no error here but we need to lock the certificate
+		}
+		totalValue += asUint * tokenDetail.DollarValue
+	}
+
+	return totalValue <= susLimit, nil
 }
 
 // Register registers the gRPC service.
