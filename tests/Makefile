@@ -44,8 +44,13 @@ transparent-proxy-e2e: build-proxy ## Run transparent proxy test
 	@echo "Running transparent proxy test..."
 	@go run . -transparent-proxy
 
+.PHONY: integrity
+integrity: build-proxy ## Run integrity test
+	@echo "Running integrity test..."
+	@go run . -integrity
+
 .PHONY: all
-all: kill-switch passthrough graceful-shutdown metrics transparent-proxy-e2e ## Run all tests
+all: kill-switch passthrough graceful-shutdown metrics transparent-proxy-e2e integrity ## Run all tests
 
 .PHONY: clean
 clean: ## Clean up test artifacts
