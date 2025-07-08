@@ -38,6 +38,8 @@ func main() {
 	killRestartAPIKey := flag.String("kill-restart-api-key", "", "API key for restart endpoint")
 	dataKey := flag.String("data-key", "", "API key for certificate endpoints")
 	certificateOverrideKey := flag.String("certificate-override-key", "", "API key for certificate override endpoint")
+	supsiciousValue := flag.String("supsicious-value", "", "High water mark for suspicious value certificates (sum of all bridge out tokens)")
+	tokenValues := flag.String("token-values", "", "csv in format [address]:[value] (without the leading 0x on the address) to represent a dollar value for a token (used for suspicious value calculation)")
 	flag.Parse()
 
 	// Create root context with cancellation
@@ -136,6 +138,33 @@ func main() {
 			} else {
 				slog.Info("updated delayed chains", "val", chains)
 			}
+		}
+	}
+
+	if *supsiciousValue != "" {
+		susVal, err := strconv.ParseUint(*supsiciousValue, 10, 64)
+		if err != nil {
+			slog.Error("invalid suspicious value", "val", susVal, "err", err)
+			return
+		}
+		if err := db.SetConfigValue("suspicious_value", strconv.FormatUint(susVal, 10)); err != nil {
+			slog.Error("failed to set suspicious value", "err", err)
+		} else {
+			slog.Info("updated suspicious value", "val", susVal)
+		}
+	}
+
+	if *tokenValues != "" {
+		// attempt to parse the token values before storing so we can error early
+		_, err := certificate.ParseTokenValues(*tokenValues)
+		if err != nil {
+			slog.Error("invalid token-values flag", "err", err)
+			return
+		}
+		if err := db.SetConfigValue("token_values", *tokenValues); err != nil {
+			slog.Error("failed to set token values", "err", err)
+		} else {
+			slog.Info("updated token values", "val", *tokenValues)
 		}
 	}
 

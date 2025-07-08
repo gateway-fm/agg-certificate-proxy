@@ -54,8 +54,13 @@ overrides: build-proxy ## Run overrides test
 	@echo "Running overrides test..."
 	@go run . -overrides
 
+.PHONY: suspicious
+suspicious: build-proxy ## Run suspicious test
+	@echo "Running suspicious test..."
+	@go run . -suspicious
+
 .PHONY: all
-all: kill-switch passthrough graceful-shutdown metrics transparent-proxy-e2e integrity overrides ## Run all tests
+all: kill-switch passthrough graceful-shutdown metrics transparent-proxy-e2e integrity overrides suspicious ## Run all tests
 
 .PHONY: clean
 clean: ## Clean up test artifacts
