@@ -13,7 +13,6 @@ import (
 
 	"log/slog"
 
-	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
 )
 
@@ -184,24 +183,19 @@ func (s *Service) SendToAggSender(cert Certificate) error {
 	client := v1.NewCertificateSubmissionServiceClient(conn)
 
 	// Unmarshal the certificate
-	var certProto typesv1.Certificate
-	if err := proto.Unmarshal(cert.RawProto, &certProto); err != nil {
+	var reqProto v1.SubmitCertificateRequest
+	if err := proto.Unmarshal(cert.RawProto, &reqProto); err != nil {
 		return fmt.Errorf("failed to unmarshal certificate: %v", err)
-	}
-
-	// Create request
-	req := &v1.SubmitCertificateRequest{
-		Certificate: &certProto,
 	}
 
 	// Send the certificate
 	if cert.ID == 0 {
-		slog.Info("forwarding immediate certificate to aggsender", "network", certProto.GetNetworkId(), "address", aggSenderAddr)
+		slog.Info("forwarding immediate certificate to aggsender", "network", reqProto.Certificate.GetNetworkId(), "address", aggSenderAddr)
 	} else {
-		slog.Info("forwarding certificate to aggsender", "certificate", cert.ID, "network", certProto.GetNetworkId(), "address", aggSenderAddr)
+		slog.Info("forwarding certificate to aggsender", "certificate", cert.ID, "network", reqProto.Certificate.GetNetworkId(), "address", aggSenderAddr)
 	}
 
-	resp, err := client.SubmitCertificate(ctx, req)
+	resp, err := client.SubmitCertificate(ctx, &reqProto)
 	if err != nil {
 		return fmt.Errorf("failed to submit certificate to aggsender: %v", err)
 	}

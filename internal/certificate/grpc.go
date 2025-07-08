@@ -38,7 +38,7 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 	slog.Info("received certificate submission request")
 
 	// Marshal the request to store it as a blob
-	rawProto, err := proto.Marshal(req.Certificate)
+	rawProto, err := proto.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal certificate: %w", err)
 	}
