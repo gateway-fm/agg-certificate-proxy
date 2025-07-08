@@ -2,17 +2,18 @@ package main
 
 import (
 	"context"
-	"google.golang.org/grpc"
-	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
-	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
-	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
-	"google.golang.org/grpc/credentials/insecure"
-	"time"
+	"crypto/rand"
+	"io"
 	"log"
 	"log/slog"
-	"crypto/rand"
 	mrand "math/rand"
-	"io"
+	"time"
+
+	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
+	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
+	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func sendRandomCertificate() {
@@ -46,11 +47,12 @@ func sendRandomCertificate() {
 	// Create simple test certificate
 	req := &v1.SubmitCertificateRequest{
 		Certificate: &typesv1.Certificate{
-			NetworkId:         1,
-			Height:            1,
-			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: make([]byte, 32)},
-			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: make([]byte, 32)},
-			BridgeExits:       exits,
+			NetworkId:           1,
+			Height:              1,
+			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: make([]byte, 32)},
+			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: make([]byte, 32)},
+			BridgeExits:         exits,
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
 		},
 	}
 

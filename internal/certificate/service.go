@@ -34,6 +34,7 @@ type Db interface {
 	GetRecentKillSwitchAttempts(attemptType string, duration time.Duration) (int, error)
 	CleanupOldKillSwitchAttempts(olderThan time.Duration) error
 	GetUnprocessedCertificates() ([]Certificate, error)
+	GetCertificateById(id []byte) (Certificate, error)
 }
 
 // Service handles the business logic for certificates.

@@ -41,7 +41,7 @@ func (s *SqliteStore) Init() error {
 			raw_proto BLOB NOT NULL,
 			received_at DATETIME NOT NULL,
 			processed_at DATETIME,
-			metadata TEXT
+			metadata TEXT,
 			cert_id TEXT
 		);
 	`)
@@ -343,4 +343,13 @@ func (s *SqliteStore) GetUnprocessedCertificates() ([]Certificate, error) {
 	}
 
 	return certs, nil
+}
+
+func (s *SqliteStore) GetCertificateById(id []byte) (Certificate, error) {
+	var cert Certificate
+	err := s.db.QueryRow("SELECT id, raw_proto, received_at, processed_at, metadata FROM certificates WHERE cert_id = ?", id).Scan(&cert.ID, &cert.RawProto, &cert.ReceivedAt, &cert.ProcessedAt, &cert.Metadata)
+	if err != nil {
+		return Certificate{}, fmt.Errorf("failed to get certificate by id: %w", err)
+	}
+	return cert, nil
 }

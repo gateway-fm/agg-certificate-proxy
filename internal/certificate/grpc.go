@@ -2,23 +2,29 @@ package certificate
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
 	"log/slog"
 
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	nodev1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
+	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
 )
 
 // GRPCServer handles incoming gRPC requests for certificate submission.
 type GRPCServer struct {
 	nodev1.UnimplementedCertificateSubmissionServiceServer
-	service        *Service
-	metricsUpdater MetricsUpdater
+	nodev1.UnimplementedNodeStateServiceServer
+	service                  *Service
+	metricsUpdater           MetricsUpdater
+	upstreamAggClientAddress string
 }
 
 type MetricsUpdater interface {
@@ -26,8 +32,12 @@ type MetricsUpdater interface {
 }
 
 // NewGRPCServer creates a new gRPC server.
-func NewGRPCServer(service *Service, metricsUpdater MetricsUpdater) *GRPCServer {
-	return &GRPCServer{service: service, metricsUpdater: metricsUpdater}
+func NewGRPCServer(service *Service, metricsUpdater MetricsUpdater, upstreamAggClientAddress string) *GRPCServer {
+	return &GRPCServer{
+		service:                  service,
+		metricsUpdater:           metricsUpdater,
+		upstreamAggClientAddress: upstreamAggClientAddress,
+	}
 }
 
 // SubmitCertificate handles the submission of a new certificate.
@@ -94,6 +104,73 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 // Register registers the gRPC service.
 func (s *GRPCServer) Register(grpcServer *grpc.Server) {
 	nodev1.RegisterCertificateSubmissionServiceServer(grpcServer, s)
+	nodev1.RegisterNodeStateServiceServer(grpcServer, s)
+}
+
+func (s *GRPCServer) GetCertificateHeader(ctx context.Context, req *nodev1.GetCertificateHeaderRequest) (*nodev1.GetCertificateHeaderResponse, error) {
+	requestId := req.GetCertificateId()
+	fromStorage, err := s.service.db.GetCertificateById(requestId.Value.Value)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			slog.Info("requested certificate not found in storage, checking upstream client", "id", requestId.Value.Value)
+			return dialAndGetCertificateHeader(ctx, s.upstreamAggClientAddress, req)
+		}
+
+		return nil, fmt.Errorf("failed to get certificate by id: %w", err)
+	}
+
+	var resp *nodev1.GetCertificateHeaderResponse
+
+	if fromStorage.ProcessedAt.Valid {
+		// we have processed this certificate so pass it through to the base grpc server
+		resp, err = dialAndGetCertificateHeader(ctx, s.upstreamAggClientAddress, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get certificate header from base grpc server: %w", err)
+		}
+	} else {
+		// this certificate has not been processed yet so return a pending state
+		resp = &nodev1.GetCertificateHeaderResponse{
+			CertificateHeader: &typesv1.CertificateHeader{
+				CertificateId: requestId,
+				Status:        typesv1.CertificateStatus_CERTIFICATE_STATUS_PENDING,
+			},
+		}
+	}
+
+	return resp, nil
+}
+
+func (s *GRPCServer) GetLatestCertificateHeader(ctx context.Context, req *nodev1.GetLatestCertificateHeaderRequest) (*nodev1.GetLatestCertificateHeaderResponse, error) {
+	// forward this straight on to the upstream client
+	conn, err := grpc.NewClient(s.upstreamAggClientAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to upstream client at %s: %v", s.upstreamAggClientAddress, err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Error("failed to close gRPC connection to upstream client", "err", err)
+		}
+	}()
+
+	client := v1.NewNodeStateServiceClient(conn)
+
+	return client.GetLatestCertificateHeader(ctx, req)
+}
+
+func dialAndGetCertificateHeader(ctx context.Context, address string, req *nodev1.GetCertificateHeaderRequest) (*nodev1.GetCertificateHeaderResponse, error) {
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to upstream client at %s: %v", address, err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Error("failed to close gRPC connection to upstream client", "err", err)
+		}
+	}()
+
+	client := v1.NewNodeStateServiceClient(conn)
+
+	return client.GetCertificateHeader(ctx, req)
 }
 
 // bytesToUint64 converts big-endian bytes to uint64

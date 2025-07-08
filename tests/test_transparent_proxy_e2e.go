@@ -112,8 +112,14 @@ func runTransparentProxyE2ETest() {
 	// Test configuration
 	proxyAddr := "127.0.0.1:50071"
 	backendAddr := "127.0.0.1:50072"
-	dbFile := "transparent-proxy-e2e-test.db"
-	logFile := "transparent-proxy-e2e-test.log"
+	dbFile := "transparent-e2e-test.db"
+	logFile := "transparent-e2e-test.log"
+
+	// Clean up any stale processes before starting
+	fmt.Println("Cleaning up any existing processes...")
+	exec.Command("pkill", "-f", "mock_receiver").Run()
+	exec.Command("pkill", "-f", "proxy").Run()
+	time.Sleep(500 * time.Millisecond)
 
 	// Cleanup
 	defer func() {
@@ -209,8 +215,10 @@ func runTransparentProxyE2ETest() {
 					Metadata:    &interopv1.FixedBytes32{Value: []byte("metadata")},
 				},
 			},
-			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: []byte("prev")},
-			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: []byte("new")},
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
+			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
+			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
+			Metadata:            &interopv1.FixedBytes32{Value: nil},
 		},
 	})
 	if err != nil {
@@ -312,8 +320,9 @@ func runTransparentProxyE2ETest() {
 	fmt.Println("\n==== Test 7: Non-delayed Certificate only imports (immediate forward) ====")
 	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
 		Certificate: &typesv1.Certificate{
-			NetworkId: 999, // Not in delayed list
-			Height:    200,
+			NetworkId:   999, // Not in delayed list
+			Height:      200,
+			BridgeExits: []*interopv1.BridgeExit{},
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{
 				{
 					BridgeExit: &interopv1.BridgeExit{
@@ -330,6 +339,7 @@ func runTransparentProxyE2ETest() {
 			},
 			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: []byte("prev2")},
 			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: []byte("new2")},
+			Metadata:          &interopv1.FixedBytes32{Value: nil},
 		},
 	})
 	if err != nil {
@@ -364,12 +374,14 @@ func runTransparentProxyE2ETest() {
 						DestNetwork: 1,
 						DestAddress: &interopv1.FixedBytes20{Value: []byte("0x1234567890123456789012345678901234567890")},
 						Amount:      &interopv1.FixedBytes32{Value: []byte("1000000000000000000")},
-						Metadata:    &interopv1.FixedBytes32{Value: []byte("metadata")},
+						Metadata:    &interopv1.FixedBytes32{Value: []byte("0x1234567890123456789012345678901234567890")},
 					},
 				},
 			},
+			BridgeExits:       []*interopv1.BridgeExit{},
 			PrevLocalExitRoot: &interopv1.FixedBytes32{Value: []byte("prev2")},
 			NewLocalExitRoot:  &interopv1.FixedBytes32{Value: []byte("new2")},
+			Metadata:          &interopv1.FixedBytes32{Value: nil},
 		},
 	})
 	if err != nil {
