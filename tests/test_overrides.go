@@ -49,8 +49,8 @@ func runOverridesTest() {
 		fmt.Println("Cleaning up any existing processes...")
 		exec.Command("pkill", "-f", "mock_receiver").Run()
 		exec.Command("pkill", "-f", "proxy").Run()
-		// os.Remove(dbFile)
-		// os.Remove(logFile)
+		os.Remove(dbFile)
+		os.Remove(logFile)
 	}()
 
 	// Step 1: Start mock backend with all services
