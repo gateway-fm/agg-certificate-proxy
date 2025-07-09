@@ -16,6 +16,7 @@ import (
 	"log/slog"
 
 	"github.com/ethereum/go-ethereum/common"
+	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 	nodev1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
 	v1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/v1"
@@ -196,6 +197,8 @@ func (s *GRPCServer) Register(grpcServer *grpc.Server) {
 	nodev1.RegisterNodeStateServiceServer(grpcServer, s)
 }
 
+var emptyHash = [32]byte{}
+
 func (s *GRPCServer) GetCertificateHeader(ctx context.Context, req *nodev1.GetCertificateHeaderRequest) (*nodev1.GetCertificateHeaderResponse, error) {
 	requestId := req.GetCertificateId()
 	fromStorage, err := s.service.db.GetCertificateById(requestId.Value.Value)
@@ -220,8 +223,12 @@ func (s *GRPCServer) GetCertificateHeader(ctx context.Context, req *nodev1.GetCe
 		// this certificate has not been processed yet so return a pending state
 		resp = &nodev1.GetCertificateHeaderResponse{
 			CertificateHeader: &typesv1.CertificateHeader{
-				CertificateId: requestId,
-				Status:        typesv1.CertificateStatus_CERTIFICATE_STATUS_PENDING,
+				Height:            1,
+				CertificateId:     requestId,
+				Status:            typesv1.CertificateStatus_CERTIFICATE_STATUS_PENDING,
+				PrevLocalExitRoot: &interopv1.FixedBytes32{Value: emptyHash[:]},
+				NewLocalExitRoot:  &interopv1.FixedBytes32{Value: emptyHash[:]},
+				Metadata:          &interopv1.FixedBytes32{Value: emptyHash[:]},
 			},
 		}
 	}

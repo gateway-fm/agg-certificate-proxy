@@ -49,8 +49,8 @@ func runSuspiciousTest() {
 		fmt.Println("Cleaning up any existing processes...")
 		exec.Command("pkill", "-f", "mock_receiver").Run()
 		exec.Command("pkill", "-f", "proxy").Run()
-		// os.Remove(dbFile)
-		// os.Remove(logFile)
+		os.Remove(dbFile)
+		os.Remove(logFile)
 	}()
 
 	// Step 1: Start mock backend with all services
@@ -97,7 +97,7 @@ func runSuspiciousTest() {
 		"--kill-restart-api-key", "test-key",
 		"--data-key", "test-data-key",
 		"--certificate-override-key", "test-certificate-override-key",
-		"--supsicious-value", "1000",
+		"--suspicious-value", "1000",
 		"--token-values", "1111111111111111111111111111111111111111:1,2222222222222222222222222222222222222222:2",
 	)
 	proxyCmd.Stdout = proxyLogFileHandle
