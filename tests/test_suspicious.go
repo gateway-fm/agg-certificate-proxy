@@ -98,7 +98,7 @@ func runSuspiciousTest() {
 		"--data-key", "test-data-key",
 		"--certificate-override-key", "test-certificate-override-key",
 		"--suspicious-value", "1000",
-		"--token-values", "1111111111111111111111111111111111111111:1,2222222222222222222222222222222222222222:2",
+		"--token-values", "1111111111111111111111111111111111111111:1,2222222222222222222222222222222222222222:2,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1",
 	)
 	proxyCmd.Stdout = proxyLogFileHandle
 	proxyCmd.Stderr = proxyLogFileHandle
@@ -106,6 +106,7 @@ func runSuspiciousTest() {
 	const wellKnownOne = "1111111111111111111111111111111111111111"
 	const wellKnownTwo = "2222222222222222222222222222222222222222"
 	const wellKnownThree = "3333333333333333333333333333333333333333"
+	const wellKnownA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 	if err := proxyCmd.Start(); err != nil {
 		log.Fatalf("Failed to start proxy: %v", err)
@@ -315,6 +316,37 @@ func runSuspiciousTest() {
 	time.Sleep(2 * time.Second)
 
 	if backend.callCounts["SubmitCertificate"] == 7 {
+		fmt.Println("✅ certificate processed as expected")
+	} else {
+		fmt.Printf("❌ Backend received %d certificate submissions (should be 6)\n", backend.callCounts["SubmitCertificate"])
+	}
+
+	fmt.Println("\n==== Test 7: Known token - check for case sensitivity - still locked away")
+	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
+		Certificate: &typesv1.Certificate{
+			NetworkId:           1, // Delayed chain
+			Height:              100,
+			BridgeExits:         generateBridgeExits([]string{"0xaaaaaaAaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaa"}, []uint64{1001}), // should multiply to 1002 and be locked away
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
+			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
+			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
+			Metadata:            &interopv1.FixedBytes32{Value: nil},
+		},
+	})
+	if err != nil {
+		fmt.Printf("❌ Certificate submission failed: %v\n", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	if backend.callCounts["SubmitCertificate"] == 7 {
+		fmt.Println("✅ certificate held in storage")
+	} else {
+		fmt.Printf("❌ Backend received %d certificate submissions (should be 4)\n", backend.callCounts["SubmitCertificate"])
+	}
+
+	time.Sleep(2 * time.Second)
+
+	if backend.callCounts["SubmitCertificate"] == 8 {
 		fmt.Println("✅ certificate processed as expected")
 	} else {
 		fmt.Printf("❌ Backend received %d certificate submissions (should be 6)\n", backend.callCounts["SubmitCertificate"])

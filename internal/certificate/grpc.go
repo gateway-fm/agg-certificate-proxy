@@ -178,6 +178,7 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 		amount := bridgeExit.GetAmount().GetValue()
 		asUint := bytesToUint64(amount)
 		asHex = strings.TrimPrefix(asHex, "0x")
+		asHex = strings.ToLower(asHex)
 		tokenDetail, ok := parsedTokenValues[asHex]
 		if !ok {
 			slog.Warn("token address not found in config", "address", asHex)
