@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"os"
 	"os/exec"
@@ -98,7 +99,7 @@ func runSuspiciousTest() {
 		"--data-key", "test-data-key",
 		"--certificate-override-key", "test-certificate-override-key",
 		"--suspicious-value", "1000",
-		"--token-values", "1111111111111111111111111111111111111111:1,2222222222222222222222222222222222222222:2,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1",
+		"--token-values", "1111111111111111111111111111111111111111:1:1000000000000000000,2222222222222222222222222222222222222222:2:1000000000000000000,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1:1000000000000000000",
 	)
 	proxyCmd.Stdout = proxyLogFileHandle
 	proxyCmd.Stderr = proxyLogFileHandle
@@ -357,7 +358,9 @@ func generateBridgeExits(addresses []string, amounts []uint64) []*interopv1.Brid
 	var result []*interopv1.BridgeExit
 
 	for idx, address := range addresses {
-		amountBytes := uint64ToBytes(amounts[idx])
+		amount := big.NewInt(0).SetUint64(amounts[idx])
+		convertedToEth := amount.Mul(amount, big.NewInt(1000000000000000000))
+		amountBytes := convertedToEth.Bytes()
 		addy := common.HexToAddress(address)
 		result = append(result, &interopv1.BridgeExit{
 			TokenInfo: &interopv1.TokenInfo{

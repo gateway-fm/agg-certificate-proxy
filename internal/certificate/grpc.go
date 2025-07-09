@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -73,19 +74,19 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 
 	var resp *nodev1.SubmitCertificateResponse
 
-	var withdrawalValue uint64
+	withdrawalValue := big.NewInt(0)
 	for _, bridgeExit := range req.Certificate.GetBridgeExits() {
-		withdrawalValue += bytesToUint64(bridgeExit.GetAmount().Value)
+		value := bridgeExit.GetAmount().GetValue()
+		asBig := big.NewInt(0).SetBytes(value)
+		withdrawalValue.Add(withdrawalValue, asBig)
 	}
-
-	slog.Info("withdrawal value", "value", withdrawalValue)
 
 	if !isDelayed {
 		// Send immediately
 		resp, err = s.sendCertificateImmediately(rawProto, string(metadataJson))
 		slog.Info("successfully sent certificate for network immediately", "network", networkID)
 	} else {
-		if withdrawalValue == 0 {
+		if withdrawalValue.Cmp(big.NewInt(0)) == 0 {
 			resp, err = s.sendCertificateImmediately(rawProto, string(metadataJson))
 			slog.Info("successfully sent certificate for network immediately", "network", networkID)
 		} else {
@@ -139,13 +140,14 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 	} else {
 		slog.Info("suspicious value", "value", suspiciousValue)
 	}
-	var susLimit uint64
+	var susLimit *big.Int
 	if suspiciousValue != "" {
-		susLimit, err = strconv.ParseUint(suspiciousValue, 10, 64)
+		parsed, err := strconv.ParseUint(suspiciousValue, 10, 64)
 		if err != nil {
 			slog.Error("failed to parse suspicious value", "err", err)
 			return true, err
 		}
+		susLimit = big.NewInt(0).SetUint64(parsed)
 	}
 
 	tokenValues, err := s.service.db.GetConfigValue("token_values")
@@ -167,7 +169,7 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 		return true, err
 	}
 
-	totalValue := uint64(0)
+	totalValue := big.NewInt(0)
 
 	for _, bridgeExit := range req.Certificate.GetBridgeExits() {
 		address := bridgeExit.GetTokenInfo().GetOriginTokenAddress()
@@ -175,8 +177,6 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 			continue
 		}
 		asHex := common.BytesToAddress(address.Value).Hex()
-		amount := bridgeExit.GetAmount().GetValue()
-		asUint := bytesToUint64(amount)
 		asHex = strings.TrimPrefix(asHex, "0x")
 		asHex = strings.ToLower(asHex)
 		tokenDetail, ok := parsedTokenValues[asHex]
@@ -184,12 +184,17 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 			slog.Warn("token address not found in config", "address", asHex)
 			return true, nil // no error here but we need to lock the certificate
 		}
-		totalValue += asUint * tokenDetail.DollarValue
+
+		amount := bridgeExit.GetAmount().GetValue()
+		asBig := big.NewInt(0).SetBytes(amount)
+		asFullToken := big.NewInt(0).Div(asBig, big.NewInt(0).SetUint64(tokenDetail.Multiplier))
+
+		totalValue.Add(totalValue, asFullToken.Mul(asFullToken, big.NewInt(0).SetUint64(tokenDetail.DollarValue)))
 	}
 
 	slog.Info("suspicious calcs", "value", totalValue, "limit", susLimit)
 
-	return totalValue > susLimit, nil
+	return totalValue.Cmp(susLimit) == 1, nil
 }
 
 // Register registers the gRPC service.
