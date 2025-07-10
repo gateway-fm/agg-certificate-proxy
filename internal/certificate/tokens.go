@@ -15,7 +15,8 @@ type TokenValue struct {
 
 // Hash returns a keccack hash of the token value based on origin network combined with the address
 func (t TokenValue) ID() string {
-	return fmt.Sprintf("%d:%s", t.OriginNetwork, t.Address)
+	address := strings.ToLower(t.Address)
+	return fmt.Sprintf("%d:%s", t.OriginNetwork, address)
 }
 
 func ParseTokenValues(tokenValues string) (map[string]TokenValue, error) {

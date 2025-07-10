@@ -50,8 +50,8 @@ func runSuspiciousTest() {
 		fmt.Println("Cleaning up any existing processes...")
 		exec.Command("pkill", "-f", "mock_receiver").Run()
 		exec.Command("pkill", "-f", "proxy").Run()
-		os.Remove(dbFile)
-		os.Remove(logFile)
+		// os.Remove(dbFile)
+		// os.Remove(logFile)
 	}()
 
 	// Step 1: Start mock backend with all services
@@ -382,6 +382,29 @@ func runSuspiciousTest() {
 		fmt.Println("✅ certificate processed as expected")
 	} else {
 		fmt.Printf("❌ Backend received %d certificate submissions\n", backend.callCounts["SubmitCertificate"])
+	}
+
+	fmt.Println("\n==== Test 9: Known token address and network but case is different - lower than limit - locked away")
+	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
+		Certificate: &typesv1.Certificate{
+			NetworkId:           1, // Delayed chain
+			Height:              100,
+			BridgeExits:         generateBridgeExits([]uint32{99}, []string{"0xaaaaaaAaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaa"}, []uint64{10}),
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
+			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
+			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
+			Metadata:            &interopv1.FixedBytes32{Value: nil},
+		},
+	})
+	if err != nil {
+		fmt.Printf("❌ Certificate submission failed: %v\n", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	if backend.callCounts["SubmitCertificate"] == 10 {
+		fmt.Println("✅ certificate sent stright through")
+	} else {
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 }
 
