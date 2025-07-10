@@ -218,10 +218,11 @@ var emptyHash = [32]byte{}
 
 func (s *GRPCServer) GetCertificateHeader(ctx context.Context, req *nodev1.GetCertificateHeaderRequest) (*nodev1.GetCertificateHeaderResponse, error) {
 	requestId := req.GetCertificateId()
+	requestIdHex := fmt.Sprintf("0x%x", requestId.Value.Value)
 	fromStorage, err := s.service.db.GetCertificateById(requestId.Value.Value)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			slog.Info("requested certificate not found in storage, checking upstream client", "id", requestId.Value.Value)
+			slog.Info("requested certificate not found in storage, checking upstream client", "id", requestIdHex)
 			return dialAndGetCertificateHeader(ctx, s.upstreamAggClientAddress, req)
 		}
 
@@ -232,14 +233,15 @@ func (s *GRPCServer) GetCertificateHeader(ctx context.Context, req *nodev1.GetCe
 
 	if fromStorage.ProcessedAt.Valid {
 		// we have processed this certificate so pass it through to the base grpc server
-		slog.Info("certificate has been processed, passing through to base grpc server", "id", requestId.Value.Value, "upstream", s.upstreamAggClientAddress)
+		slog.Info("certificate has been processed, passing through to base grpc server", "id", requestIdHex, "upstream", s.upstreamAggClientAddress)
 		resp, err = dialAndGetCertificateHeader(ctx, s.upstreamAggClientAddress, req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get certificate header from base grpc server: %w", err)
 		}
-		slog.Info("successfully got certificate header from base grpc server", "requestId", requestId.Value.Value, "receivedId", resp.CertificateHeader.CertificateId.Value.Value, "upstream", s.upstreamAggClientAddress)
+		receivedIdHex := fmt.Sprintf("0x%x", resp.CertificateHeader.CertificateId.Value.Value)
+		slog.Info("successfully got certificate header from base grpc server", "requestId", requestIdHex, "receivedId", receivedIdHex, "upstream", s.upstreamAggClientAddress)
 	} else {
-		slog.Info("certificate has not been processed yet, returning pending state", "requestId", requestId.Value.Value)
+		slog.Info("certificate has not been processed yet, returning pending state", "requestId", requestIdHex)
 		// this certificate has not been processed yet so return a pending state
 		resp = &nodev1.GetCertificateHeaderResponse{
 			CertificateHeader: &typesv1.CertificateHeader{
