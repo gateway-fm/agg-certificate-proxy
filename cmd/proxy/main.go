@@ -39,7 +39,7 @@ func main() {
 	dataKey := flag.String("data-key", "", "API key for certificate endpoints")
 	certificateOverrideKey := flag.String("certificate-override-key", "", "API key for certificate override endpoint")
 	supsiciousValue := flag.String("suspicious-value", "", "High water mark for suspicious value certificates (sum of all bridge out tokens)")
-	tokenValues := flag.String("token-values", "", "csv in format [address]:[value]:[multiplier] (without the leading 0x on the address) to represent a dollar value for a token (used for suspicious value calculation), the multiplier is to denote decimal places")
+	tokenValues := flag.String("token-values", "", "csv in format [origin-network]:[address]:[value]:[multiplier] (without the leading 0x on the address) to represent a dollar value for a token (used for suspicious value calculation), the multiplier is to denote decimal places")
 	flag.Parse()
 
 	// Create root context with cancellation

@@ -76,7 +76,7 @@ The proxy accepts the following command-line flags:
 - `-data-key`: API key for certificate endpoints (required)
 - `-certificate-override-key`: API key for overriding lockout of a certificate (will trigger sending in the next service iteration)
 - `-suspicious-value`: High water mark for suspicious value certificates (sum of all bridge out tokens)"
-- `-token-values`: csv in format [address]:[value]:[multiplier] (without the leading 0x on the address) to represent a dollar value for a token (used for suspicious value calculation), the multiplier is to denote decimal places
+- `-token-values`: csv in format [origin-network]:[address]:[value]:[multiplier] (without the leading 0x on the address) to represent a dollar value for a token (used for suspicious value calculation), the multiplier is to denote decimal places
 note: ommitting the suspicious-value or token-values flags will treat all certificates as suspcious if the have any bridge exits
 
 ## Kill Switch Functionality

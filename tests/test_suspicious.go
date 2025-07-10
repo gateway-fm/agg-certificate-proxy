@@ -99,7 +99,7 @@ func runSuspiciousTest() {
 		"--data-key", "test-data-key",
 		"--certificate-override-key", "test-certificate-override-key",
 		"--suspicious-value", "1000",
-		"--token-values", "1111111111111111111111111111111111111111:1:1000000000000000000,2222222222222222222222222222222222222222:2:1000000000000000000,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1:1000000000000000000",
+		"--token-values", "98:1111111111111111111111111111111111111111:1:1000000000000000000,99:2222222222222222222222222222222222222222:2:1000000000000000000,99:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1:1000000000000000000",
 	)
 	proxyCmd.Stdout = proxyLogFileHandle
 	proxyCmd.Stderr = proxyLogFileHandle
@@ -150,7 +150,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 1 {
 		fmt.Println("✅ Backend received immediately as expected")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 0)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	fmt.Println("\n==== Test 2: Unknown token and lower than suspicious value - locked away")
@@ -158,7 +158,7 @@ func runSuspiciousTest() {
 		Certificate: &typesv1.Certificate{
 			NetworkId:           1, // Delayed chain
 			Height:              100,
-			BridgeExits:         generateBridgeExits([]string{"0x3333333333333333333333333333333333333333"}, []uint64{100}),
+			BridgeExits:         generateBridgeExits([]uint32{1}, []string{"0x3333333333333333333333333333333333333333"}, []uint64{100}),
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
 			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
 			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
@@ -172,7 +172,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 1 {
 		fmt.Println("✅ certificate held in storage")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 0)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	time.Sleep(2 * time.Second)
@@ -180,7 +180,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 2 {
 		fmt.Println("✅ certificate processed as expected")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 0)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	fmt.Println("\n==== Test 3: Known token and lower than suspicious value - straight through")
@@ -188,7 +188,7 @@ func runSuspiciousTest() {
 		Certificate: &typesv1.Certificate{
 			NetworkId:           1, // Delayed chain
 			Height:              100,
-			BridgeExits:         generateBridgeExits([]string{wellKnownOne}, []uint64{100}),
+			BridgeExits:         generateBridgeExits([]uint32{98}, []string{wellKnownOne}, []uint64{100}),
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
 			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
 			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
@@ -203,7 +203,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 3 {
 		fmt.Println("✅ certificate processed immediately as expected")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 3)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	fmt.Println("\n==== Test 4: Multiple known tokens and lower than suspicious value - straight through")
@@ -211,7 +211,7 @@ func runSuspiciousTest() {
 		Certificate: &typesv1.Certificate{
 			NetworkId:           1, // Delayed chain
 			Height:              100,
-			BridgeExits:         generateBridgeExits([]string{wellKnownOne, wellKnownTwo}, []uint64{100, 100}),
+			BridgeExits:         generateBridgeExits([]uint32{98, 99}, []string{wellKnownOne, wellKnownTwo}, []uint64{100, 100}),
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
 			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
 			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
@@ -226,7 +226,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 4 {
 		fmt.Println("✅ certificate processed immediately as expected")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 3)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	fmt.Println("\n==== Test 4: Multiple known tokens and one unknown token - known tokens lower than limit - locked away")
@@ -234,7 +234,7 @@ func runSuspiciousTest() {
 		Certificate: &typesv1.Certificate{
 			NetworkId:           1, // Delayed chain
 			Height:              100,
-			BridgeExits:         generateBridgeExits([]string{wellKnownOne, wellKnownTwo, wellKnownThree}, []uint64{100, 100, 100}),
+			BridgeExits:         generateBridgeExits([]uint32{98, 99, 99}, []string{wellKnownOne, wellKnownTwo, wellKnownThree}, []uint64{100, 100, 100}),
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
 			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
 			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
@@ -249,7 +249,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 4 {
 		fmt.Println("✅ certificate held in storage")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 4)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	time.Sleep(2 * time.Second)
@@ -257,7 +257,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 5 {
 		fmt.Println("✅ certificate processed as expected")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 6)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	fmt.Println("\n==== Test 5: Single known token over the limit - locked away")
@@ -265,7 +265,7 @@ func runSuspiciousTest() {
 		Certificate: &typesv1.Certificate{
 			NetworkId:           1, // Delayed chain
 			Height:              100,
-			BridgeExits:         generateBridgeExits([]string{wellKnownTwo}, []uint64{10000}),
+			BridgeExits:         generateBridgeExits([]uint32{99}, []string{wellKnownTwo}, []uint64{10000}),
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
 			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
 			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
@@ -280,7 +280,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 5 {
 		fmt.Println("✅ certificate held in storage")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 4)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	time.Sleep(2 * time.Second)
@@ -288,15 +288,15 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 6 {
 		fmt.Println("✅ certificate processed as expected")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 6)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
-	fmt.Println("\n==== Test 6: Known token - value is multipleied correctly - locked away")
+	fmt.Println("\n==== Test 6: Known token - value is multiplied correctly - locked away")
 	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
 		Certificate: &typesv1.Certificate{
 			NetworkId:           1, // Delayed chain
 			Height:              100,
-			BridgeExits:         generateBridgeExits([]string{wellKnownTwo}, []uint64{501}), // should multiply to 1002 and be locked away
+			BridgeExits:         generateBridgeExits([]uint32{99}, []string{wellKnownTwo}, []uint64{501}), // should multiply to 1002 and be locked away
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
 			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
 			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
@@ -311,7 +311,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 6 {
 		fmt.Println("✅ certificate held in storage")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 4)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	time.Sleep(2 * time.Second)
@@ -319,7 +319,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 7 {
 		fmt.Println("✅ certificate processed as expected")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 6)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	fmt.Println("\n==== Test 7: Known token - check for case sensitivity - still locked away")
@@ -327,7 +327,7 @@ func runSuspiciousTest() {
 		Certificate: &typesv1.Certificate{
 			NetworkId:           1, // Delayed chain
 			Height:              100,
-			BridgeExits:         generateBridgeExits([]string{"0xaaaaaaAaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaa"}, []uint64{1001}), // should multiply to 1002 and be locked away
+			BridgeExits:         generateBridgeExits([]uint32{99}, []string{"0xaaaaaaAaaaaaaaaAaaaaaaaaaAaaaaaaaaaAaaaa"}, []uint64{1001}), // should multiply to 1002 and be locked away
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
 			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
 			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
@@ -342,7 +342,7 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 7 {
 		fmt.Println("✅ certificate held in storage")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 4)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
 	}
 
 	time.Sleep(2 * time.Second)
@@ -350,11 +350,42 @@ func runSuspiciousTest() {
 	if backend.callCounts["SubmitCertificate"] == 8 {
 		fmt.Println("✅ certificate processed as expected")
 	} else {
-		fmt.Printf("❌ Backend received %d certificate submissions (should be 6)\n", backend.callCounts["SubmitCertificate"])
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
+	}
+
+	fmt.Println("\n==== Test 8: Known token address but from different origin network - locked away")
+	_, err = certClient.SubmitCertificate(ctx, &v1.SubmitCertificateRequest{
+		Certificate: &typesv1.Certificate{
+			NetworkId:           1, // Delayed chain
+			Height:              100,
+			BridgeExits:         generateBridgeExits([]uint32{1337}, []string{wellKnownOne}, []uint64{1001}),
+			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{},
+			PrevLocalExitRoot:   &interopv1.FixedBytes32{Value: []byte("prev")},
+			NewLocalExitRoot:    &interopv1.FixedBytes32{Value: []byte("new")},
+			Metadata:            &interopv1.FixedBytes32{Value: nil},
+		},
+	})
+	if err != nil {
+		fmt.Printf("❌ Certificate submission failed: %v\n", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	if backend.callCounts["SubmitCertificate"] == 8 {
+		fmt.Println("✅ certificate held in storage")
+	} else {
+		fmt.Printf("❌ Backend received %d certificate submissions \n", backend.callCounts["SubmitCertificate"])
+	}
+
+	time.Sleep(2 * time.Second)
+
+	if backend.callCounts["SubmitCertificate"] == 9 {
+		fmt.Println("✅ certificate processed as expected")
+	} else {
+		fmt.Printf("❌ Backend received %d certificate submissions\n", backend.callCounts["SubmitCertificate"])
 	}
 }
 
-func generateBridgeExits(addresses []string, amounts []uint64) []*interopv1.BridgeExit {
+func generateBridgeExits(originNetworks []uint32, addresses []string, amounts []uint64) []*interopv1.BridgeExit {
 	var result []*interopv1.BridgeExit
 
 	for idx, address := range addresses {
@@ -364,7 +395,7 @@ func generateBridgeExits(addresses []string, amounts []uint64) []*interopv1.Brid
 		addy := common.HexToAddress(address)
 		result = append(result, &interopv1.BridgeExit{
 			TokenInfo: &interopv1.TokenInfo{
-				OriginNetwork:      1,
+				OriginNetwork:      originNetworks[idx],
 				OriginTokenAddress: &interopv1.FixedBytes20{Value: addy.Bytes()},
 			},
 			DestNetwork: 1,

@@ -179,14 +179,24 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 	totalValue := big.NewInt(0)
 
 	for _, bridgeExit := range req.Certificate.GetBridgeExits() {
-		address := bridgeExit.GetTokenInfo().GetOriginTokenAddress()
+		tokenInfo := bridgeExit.GetTokenInfo()
+		if tokenInfo == nil {
+			continue
+		}
+		address := tokenInfo.GetOriginTokenAddress()
 		if address == nil {
 			continue
 		}
 		asHex := common.BytesToAddress(address.Value).Hex()
 		asHex = strings.TrimPrefix(asHex, "0x")
 		asHex = strings.ToLower(asHex)
-		tokenDetail, ok := parsedTokenValues[asHex]
+
+		tv := TokenValue{
+			OriginNetwork: tokenInfo.GetOriginNetwork(),
+			Address:       asHex,
+		}
+
+		tokenDetail, ok := parsedTokenValues[tv.ID()]
 		if !ok {
 			slog.Warn("token address not found in config", "address", asHex, "cert", certHex)
 			return true, nil // no error here but we need to lock the certificate
