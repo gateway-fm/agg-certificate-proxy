@@ -198,7 +198,7 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 
 		tokenDetail, ok := parsedTokenValues[tv.ID()]
 		if !ok {
-			slog.Warn("token address not found in config", "address", asHex, "cert", certHex)
+			slog.Warn("token address not found in config", "originNetwork", tv.OriginNetwork, "address", asHex, "cert", certHex)
 			return true, nil // no error here but we need to lock the certificate
 		}
 
@@ -206,7 +206,7 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 		asBig := big.NewInt(0).SetBytes(amount)
 		asFullToken := big.NewInt(0).Div(asBig, big.NewInt(0).SetUint64(tokenDetail.Multiplier))
 
-		slog.Info("token detail", "cert", certHex, "token", asHex, "amount-token", asFullToken.String(), "amount-wei", asBig.String())
+		slog.Info("token detail", "cert", certHex, "token", asHex, "originNetwork", tv.OriginNetwork, "amount-token", asFullToken.String(), "amount-wei", asBig.String())
 
 		totalValue.Add(totalValue, asFullToken.Mul(asFullToken, big.NewInt(0).SetUint64(tokenDetail.DollarValue)))
 

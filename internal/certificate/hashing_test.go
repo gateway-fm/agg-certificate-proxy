@@ -69,7 +69,7 @@ func Test_generateCertificateId_FromDatabaseFile(t *testing.T) {
 		t.Fatalf("failed to get certificates: %v", err)
 	}
 
-	var huntId int64 = 4
+	var huntId int64 = 7
 
 	for _, cert := range certs {
 		if cert.ID != huntId {
