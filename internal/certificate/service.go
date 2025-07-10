@@ -202,11 +202,16 @@ func (s *Service) SendToAggSender(cert Certificate) (*v1.SubmitCertificateRespon
 		return nil, fmt.Errorf("failed to submit certificate to aggsender: %v", err)
 	}
 
+	certIdHex := fmt.Sprintf("0x%x", resp.CertificateId.Value.Value)
+
+	calculatedCertId := generateCertificateId(reqProto.Certificate)
+	calculatedCertIdHex := fmt.Sprintf("0x%x", calculatedCertId.Value.Value)
+
 	if resp.CertificateId != nil && resp.CertificateId.Value != nil {
 		if cert.ID == 0 {
-			slog.Info("immediate certificate forwarded successfully", "received-id", resp.CertificateId.Value.Value)
+			slog.Info("immediate certificate forwarded successfully", "our-certificate", cert.ID, "received-id", certIdHex, "calculated-id", calculatedCertIdHex)
 		} else {
-			slog.Info("certificate forwarded successfully", "certificate", cert.ID, "received-id", resp.CertificateId.Value.Value)
+			slog.Info("certificate forwarded successfully", "our-certificate", cert.ID, "received-id", certIdHex, "calculated-id", calculatedCertIdHex)
 		}
 	} else {
 		if cert.ID == 0 {

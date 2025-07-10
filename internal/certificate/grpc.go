@@ -72,6 +72,9 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 		isDelayed = true
 	}
 
+	certId := generateCertificateId(req.Certificate)
+	certHex := fmt.Sprintf("0x%x", certId.Value.Value)
+
 	var resp *nodev1.SubmitCertificateResponse
 
 	withdrawalValue := big.NewInt(0)
@@ -80,6 +83,8 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 		asBig := big.NewInt(0).SetBytes(value)
 		withdrawalValue.Add(withdrawalValue, asBig)
 	}
+
+	slog.Info("withdrawal value", "value", withdrawalValue.String())
 
 	if !isDelayed {
 		// Send immediately
@@ -90,20 +95,23 @@ func (s *GRPCServer) SubmitCertificate(ctx context.Context, req *nodev1.SubmitCe
 			resp, err = s.sendCertificateImmediately(rawProto, string(metadataJson))
 			slog.Info("successfully sent certificate for network immediately", "network", networkID)
 		} else {
-			isSuspicious, err := s.checkForSuspiciousValue(req)
+			isSuspicious, err := s.checkForSuspiciousValue(req, certHex)
 			if err != nil {
 				slog.Error("failed to check for suspicious value", "err", err)
 				return nil, fmt.Errorf("failed to check for suspicious value: %w", err)
 			}
 			if isSuspicious {
 				slog.Info("certificate is suspicious, locking certificate", "network", networkID)
-				resp, err = s.storeCertificate(rawProto, string(metadataJson), req.Certificate)
+				resp, err = s.storeCertificate(rawProto, string(metadataJson), req.Certificate, certId)
 			} else {
 				slog.Info("certificate doesn't appear to be suspicious, sending immediately", "network", networkID)
 				resp, err = s.sendCertificateImmediately(rawProto, string(metadataJson))
 			}
 		}
 	}
+
+	responseIdHex := fmt.Sprintf("0x%x", resp.CertificateId.Value.Value)
+	slog.Info("certificate submission response", "ourCertId", certHex, "responseId", responseIdHex)
 
 	return resp, nil
 }
@@ -118,8 +126,7 @@ func (s *GRPCServer) sendCertificateImmediately(rawProto []byte, metadataJson st
 	return resp, err
 }
 
-func (s *GRPCServer) storeCertificate(rawProto []byte, metadataJson string, certificate *typesv1.Certificate) (*nodev1.SubmitCertificateResponse, error) {
-	certId := generateCertificateId(certificate)
+func (s *GRPCServer) storeCertificate(rawProto []byte, metadataJson string, certificate *typesv1.Certificate, certId *typesv1.CertificateId) (*nodev1.SubmitCertificateResponse, error) {
 	if err := s.service.StoreCertificate(rawProto, string(metadataJson), certId.Value.Value); err != nil {
 		return nil, fmt.Errorf("failed to store certificate: %w", err)
 	}
@@ -131,7 +138,7 @@ func (s *GRPCServer) storeCertificate(rawProto []byte, metadataJson string, cert
 // checkForSuspiciousValue will use the config passed at app startup to determine a dollar value for tokens
 // in the certificate.  If it goes over the configured threshold then we will return true and lock the certificate
 // likewise if we encounter a token address that is not in the config we will return true to lock the certificate
-func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateRequest) (bool, error) {
+func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateRequest, certHex string) (bool, error) {
 	// now lets total up the values of the tokens based on the config
 	suspiciousValue, err := s.service.db.GetConfigValue("suspicious_value")
 	if err != nil {
@@ -181,7 +188,7 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 		asHex = strings.ToLower(asHex)
 		tokenDetail, ok := parsedTokenValues[asHex]
 		if !ok {
-			slog.Warn("token address not found in config", "address", asHex)
+			slog.Warn("token address not found in config", "address", asHex, "cert", certHex)
 			return true, nil // no error here but we need to lock the certificate
 		}
 
@@ -189,10 +196,14 @@ func (s *GRPCServer) checkForSuspiciousValue(req *nodev1.SubmitCertificateReques
 		asBig := big.NewInt(0).SetBytes(amount)
 		asFullToken := big.NewInt(0).Div(asBig, big.NewInt(0).SetUint64(tokenDetail.Multiplier))
 
+		slog.Info("token detail", "cert", certHex, "token", asHex, "amount-token", asFullToken.String(), "amount-wei", asBig.String())
+
 		totalValue.Add(totalValue, asFullToken.Mul(asFullToken, big.NewInt(0).SetUint64(tokenDetail.DollarValue)))
+
+		slog.Info("intermediate total value", "cert", certHex, "value", totalValue.String(), "limit", susLimit.String())
 	}
 
-	slog.Info("suspicious calcs", "value", totalValue, "limit", susLimit)
+	slog.Info("suspicious calcs", "cert", certHex, "value", totalValue, "limit", susLimit)
 
 	return totalValue.Cmp(susLimit) == 1, nil
 }
@@ -221,11 +232,14 @@ func (s *GRPCServer) GetCertificateHeader(ctx context.Context, req *nodev1.GetCe
 
 	if fromStorage.ProcessedAt.Valid {
 		// we have processed this certificate so pass it through to the base grpc server
+		slog.Info("certificate has been processed, passing through to base grpc server", "id", requestId.Value.Value, "upstream", s.upstreamAggClientAddress)
 		resp, err = dialAndGetCertificateHeader(ctx, s.upstreamAggClientAddress, req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get certificate header from base grpc server: %w", err)
 		}
+		slog.Info("successfully got certificate header from base grpc server", "requestId", requestId.Value.Value, "receivedId", resp.CertificateHeader.CertificateId.Value.Value, "upstream", s.upstreamAggClientAddress)
 	} else {
+		slog.Info("certificate has not been processed yet, returning pending state", "requestId", requestId.Value.Value)
 		// this certificate has not been processed yet so return a pending state
 		resp = &nodev1.GetCertificateHeaderResponse{
 			CertificateHeader: &typesv1.CertificateHeader{

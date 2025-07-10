@@ -102,6 +102,8 @@ func (m *mockBackend) GetEpochConfiguration(ctx context.Context, req *v1.GetEpoc
 	}, nil
 }
 
+var emptyHash = make([]byte, 32)
+
 func runTransparentProxyE2ETest() {
 	fmt.Println("=================================================")
 	fmt.Println("AggLayer Certificate Proxy - Full E2E Test")
@@ -329,6 +331,7 @@ func runTransparentProxyE2ETest() {
 			BridgeExits: []*interopv1.BridgeExit{},
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{
 				{
+					GlobalIndex: &interopv1.FixedBytes32{Value: emptyHash},
 					BridgeExit: &interopv1.BridgeExit{
 						TokenInfo: &interopv1.TokenInfo{
 							OriginNetwork:      1,
@@ -370,6 +373,7 @@ func runTransparentProxyE2ETest() {
 			// only bridges in - no bridge exits
 			ImportedBridgeExits: []*interopv1.ImportedBridgeExit{
 				{
+					GlobalIndex: &interopv1.FixedBytes32{Value: emptyHash},
 					BridgeExit: &interopv1.BridgeExit{
 						TokenInfo: &interopv1.TokenInfo{
 							OriginNetwork:      1,
