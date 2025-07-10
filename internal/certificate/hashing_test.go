@@ -2,7 +2,9 @@ package certificate
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -67,7 +69,7 @@ func Test_generateCertificateId_FromDatabaseFile(t *testing.T) {
 		t.Fatalf("failed to get certificates: %v", err)
 	}
 
-	var huntId int64 = 3
+	var huntId int64 = 4
 
 	for _, cert := range certs {
 		if cert.ID != huntId {
@@ -80,5 +82,11 @@ func Test_generateCertificateId_FromDatabaseFile(t *testing.T) {
 		}
 		certId := generateCertificateId(certProto.Certificate)
 		fmt.Printf("cert id: %x\n", certId.Value.Value)
+
+		certAsJson, err := json.Marshal(certProto)
+		if err != nil {
+			t.Fatalf("failed to marshal certificate: %v", err)
+		}
+		os.WriteFile("cert.json", certAsJson, 0644)
 	}
 }

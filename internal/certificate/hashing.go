@@ -163,7 +163,14 @@ func hashImportedBridgeExit(b *interopv1.ImportedBridgeExit) []byte {
 
 	data = append(data, claimToHash...)
 
-	data = append(data, b.GlobalIndex.Value...)
+	// reverse the global index bytes
+	reversedGlobalIndex := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		reversedGlobalIndex[i] = b.GlobalIndex.Value[31-i]
+	}
+
+	globalHashed := crypto.Keccak256Hash(reversedGlobalIndex).Bytes()
+	data = append(data, globalHashed...)
 
 	return crypto.Keccak256Hash(data).Bytes()
 }

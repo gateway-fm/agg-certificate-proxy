@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	interopv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/interop/types/v1"
 	typesv1 "github.com/gateway-fm/agg-certificate-proxy/pkg/proto/agglayer/node/types/v1"
 )
@@ -209,9 +208,12 @@ func mapToImportedBridgeExit(m map[string]interface{}) (*interopv1.ImportedBridg
 						bytes[8] |= 0x01
 					}
 
-					hashed := crypto.Keccak256Hash(bytes).Bytes()
+					// reverse the bytes
+					for i := 0; i < 16; i++ {
+						bytes[i], bytes[31-i] = bytes[31-i], bytes[i]
+					}
 
-					imported.GlobalIndex = &interopv1.FixedBytes32{Value: hashed}
+					imported.GlobalIndex = &interopv1.FixedBytes32{Value: bytes}
 				}
 			}
 		}
