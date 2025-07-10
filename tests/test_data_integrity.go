@@ -136,7 +136,7 @@ func createComplexCertificateRequest(networkID uint32, height uint64) *v1.Submit
 				DestAddress: &interopv1.FixedBytes20{Value: []byte("imported-dest-67890")},
 				Amount:      &interopv1.FixedBytes32{Value: []byte("imported-amount-0011223344556677")},
 			},
-			GlobalIndex: &interopv1.FixedBytes32{Value: []byte("global-index-8899aabbccddeeff")},
+			GlobalIndex: &interopv1.FixedBytes32{Value: emptyHash[:]},
 		},
 	}
 
