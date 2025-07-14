@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -26,26 +27,50 @@ func runMetricsIntegrationTest() {
 	fmt.Println("=====================================")
 	fmt.Println()
 
+	killKey := "test-kill-key"
+	restartKey := "test-restart-key"
+	dataKey := "test-data-key"
+	certificateOverrideKey := "test-certificate-override-key"
+	backendAddr := "127.0.0.1:50072"
+
 	// Clean up any stale processes before starting
 	fmt.Println("Cleaning up any existing processes...")
 	exec.Command("pkill", "-f", "mock_receiver").Run()
 	exec.Command("pkill", "-f", "proxy").Run()
 	time.Sleep(500 * time.Millisecond)
 
+	backend := newMockBackend()
+	backendServer := grpc.NewServer()
+	v1.RegisterCertificateSubmissionServiceServer(backendServer, backend)
+	v1.RegisterNodeStateServiceServer(backendServer, backend)
+	v1.RegisterConfigurationServiceServer(backendServer, backend)
+
+	backendLis, err := net.Listen("tcp", backendAddr)
+	if err != nil {
+		log.Fatalf("Failed to listen for backend: %v", err)
+	}
+
+	go func() {
+		if err := backendServer.Serve(backendLis); err != nil {
+			log.Printf("Backend serve error: %v", err)
+		}
+	}()
+	defer backendServer.GracefulStop()
+
+	// Wait for backend to be ready
+	time.Sleep(500 * time.Millisecond)
+	fmt.Printf("✅ Mock backend started on %s with all services\n", backendAddr)
+
 	// Clean up first
 	os.Remove("metrics-test.db")
 	os.Remove("metrics-test.log")
+	os.Remove("mock-receiver.log")
 
 	defer func() {
-		os.Remove("metrics-test.db")
-		os.Remove("metrics-test.log")
-		os.Remove("mock-receiver.log")
+		// os.Remove("metrics-test.db")
+		// os.Remove("metrics-test.log")
+		// os.Remove("mock-receiver.log")
 	}()
-
-	killKey := "test-kill-key"
-	restartKey := "test-restart-key"
-	dataKey := "test-data-key"
-	certificateOverrideKey := "test-certificate-override-key"
 
 	// Start proxy
 	fmt.Println("1. Starting proxy...")
@@ -57,8 +82,9 @@ func runMetricsIntegrationTest() {
 		"--kill-restart-api-key", restartKey,
 		"--data-key", dataKey,
 		"--certificate-override-key", certificateOverrideKey,
-		"--aggsender-addr", "127.0.0.1:50052",
+		"--aggsender-addr", "127.0.0.1:50072",
 		"--delayed-chains", "1,2", // Only delay chains 1 and 2
+		"--scheduler-interval", "500ms",
 	)
 
 	logFile, _ := os.Create("metrics-test.log")
@@ -125,7 +151,7 @@ func runMetricsIntegrationTest() {
 	}
 
 	// wait a little time for the metrics to be updated
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// now lets check the metrics
 	fmt.Println("5. Fetching metrics...")
@@ -208,6 +234,58 @@ func runMetricsIntegrationTest() {
 		fmt.Println("9. ✅ Metrics check complete")
 	} else {
 		fmt.Println("9. ❌ Metrics check failed")
+	}
+
+	// now override all the certificates that we just sent and ensure all the counts
+	// go to 0 as they are no longer pending
+	for i := 1; i < 4; i++ {
+		url := fmt.Sprintf("http://localhost:8080/override?key=%s&cert_id=%v", certificateOverrideKey, i)
+		req, err := http.NewRequest(http.MethodPost, url, nil)
+		if err != nil {
+			log.Fatalf("error overriding certificate: %s", err)
+		}
+		_, err = http.DefaultClient.Do(req)
+		if err != nil {
+			log.Fatalf("error overriding certificate: %s", err)
+		}
+	}
+
+	// wait for the overrides to be handled
+	time.Sleep(10 * time.Second)
+
+	fmt.Println("9. Fetching metrics...")
+	resp, err = http.Get("http://127.0.0.1:8080/metrics")
+	if err != nil {
+		log.Fatal("Failed to get metrics: ", err)
+	}
+	defer resp.Body.Close()
+
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal("Failed to read metrics: ", err)
+	}
+
+	expectedMetrics = []string{
+		"certificate_total_count 0",
+		"certificate_total_eth 0",
+		"network_1_total_eth 0",
+		"network_2_total_eth 0",
+	}
+
+	ok = true
+	for _, expectedMetric := range expectedMetrics {
+		if !strings.Contains(string(body), expectedMetric) {
+			log.Printf("  ❌ Expected metric not found: %s", expectedMetric)
+			ok = false
+		} else {
+			log.Printf("  ✅ Expected metric found: %s", expectedMetric)
+		}
+	}
+
+	if ok {
+		fmt.Println("10. ✅ Metrics check complete")
+	} else {
+		fmt.Println("10. ❌ Metrics check failed")
 	}
 
 	fmt.Println()

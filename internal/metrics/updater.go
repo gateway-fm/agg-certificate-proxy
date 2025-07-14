@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/big"
 	"strconv"
+	"time"
 
 	"github.com/gateway-fm/agg-certificate-proxy/internal/certificate"
 )
@@ -22,7 +23,7 @@ func NewUpdater(service *certificate.Service, reporter *PrometheusReporter) *Upd
 		reporter: reporter,
 		// buffered channel to avoid blocking and all we need to know is that "something"
 		// has happened whilst we were busy
-		trigger: make(chan struct{}, 1),
+		trigger: make(chan struct{}, 256),
 	}
 }
 
@@ -36,6 +37,25 @@ func (u *Updater) Start(ctx context.Context) {
 				return
 			}
 		}
+	}()
+
+	// another routine to update based on a trigger.  We need this
+	// because if a few override requests land or a number of certificates
+	// there is a chance the metrics won't be updated to reflect the new state
+	// because we use the buffered channel to ensure there isn't overwork done
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				slog.Info("timer based updating of metrics")
+				u.trigger <- struct{}{}
+			case <-ctx.Done():
+				return
+			}
+		}
+
 	}()
 }
 

@@ -243,7 +243,7 @@ func main() {
 
 	// Create and register HTTP handlers
 	// First register certificate API handlers
-	apiServer := certificate.NewAPIServer(certificateService)
+	apiServer := certificate.NewAPIServer(certificateService, metricsUpdater)
 	apiServer.RegisterHandlers()
 
 	// Then register health API handlers

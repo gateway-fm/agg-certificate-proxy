@@ -30,12 +30,13 @@ func init() {
 
 // APIServer handles HTTP requests.
 type APIServer struct {
-	service *Service
+	service        *Service
+	metricsUpdater MetricsUpdater
 }
 
 // NewAPIServer creates a new API server.
-func NewAPIServer(service *Service) *APIServer {
-	return &APIServer{service: service}
+func NewAPIServer(service *Service, metricsUpdater MetricsUpdater) *APIServer {
+	return &APIServer{service: service, metricsUpdater: metricsUpdater}
 }
 
 // RegisterHandlers registers the HTTP handlers.
@@ -560,6 +561,8 @@ func (s *APIServer) handleRestart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *APIServer) handleOverride(w http.ResponseWriter, r *http.Request) {
+	defer s.metricsUpdater.Trigger()
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
